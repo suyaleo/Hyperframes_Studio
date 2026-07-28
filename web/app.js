@@ -1,13 +1,4 @@
-const APP_BASE = (() => {
-  const b = document.querySelector("base")?.getAttribute("href");
-  if (b) {
-    try {
-      return new URL(b, location.origin).pathname.replace(/\/$/, "");
-    } catch (e) {}
-  }
-  if (location.pathname.startsWith("/cards")) return "/cards";
-  return "";
-})();
+const APP_BASE = (window.APP_BASE || (location.pathname.startsWith("/cards") ? "/cards" : "")).replace(/\/$/, "");
 function withBase(path) {
   if (!path) return path;
   if (/^https?:/i.test(path)) return path;
@@ -233,9 +224,9 @@ function setPreview(url) {
   const stage = $("#stage");
   if (!stage) return;
   const phone = state.aspect === "9:16";
-  stage.classList.toggle("phone-mode", phone);
+  stage.classList.toggle("phone-mode", !!phone);
   if (!url) {
-    stage.innerHTML = `<div class="empty">카드를 생성하면 여기서 미리보기 재생됩니다</div>`;
+    stage.innerHTML = `<div class="empty">카드를 생성하면 여기에 미리보기가 뜹니다</div>`;
     return;
   }
   const src = withBase(url) + (String(url).includes("?") ? "&" : "?") + "t=" + Date.now();

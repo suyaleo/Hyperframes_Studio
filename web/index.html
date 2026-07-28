@@ -2,50 +2,44 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <base href="/cards/"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>Leo Card Motion</title>
-  <link rel="stylesheet" href="static/styles.css?v=0.4.1"/>
-  <style>
-    .toast{position:fixed;right:16px;bottom:16px;background:#1c1c1f;border:1px solid rgba(244,241,234,.14);padding:10px 14px;border-radius:12px;z-index:50;font-size:12.5px;max-width:min(420px,calc(100vw - 24px))}
-    .toast.bad{border-color:rgba(224,138,138,.4);color:#ffd0d0}
-  </style>
+  <link rel="stylesheet" href="/cards/static/styles.css?v=0.4.2"/>
 </head>
 <body>
   <div class="app">
-    <aside class="rail">
+    <aside class="rail" aria-label="navigation">
       <div class="brand">LC</div>
-      <button class="active" type="button"><span>▣</span>스튜디오</button>
-      <button type="button" onclick="location.href='/app/'"><span>▶</span>Timeline</button>
-      <button type="button" onclick="location.href='/grok/'"><span>◎</span>Grok</button>
+      <a class="nav active" href="/cards/"><span>▣</span>스튜디오</a>
+      <a class="nav" href="/app/"><span>▶</span>Timeline</a>
+      <a class="nav" href="/grok/"><span>◎</span>Grok</a>
     </aside>
+
     <div class="main">
       <header class="top">
-        <h1>Leo Card Motion <small>Hyperframes 기반 · 정보 카드 영상</small></h1>
-        <div class="tabs">
-          <button class="active" type="button">트렌드</button>
-          <button type="button">카드 빌더</button>
-          <button type="button">슬라이드</button>
-          <button type="button">렌더</button>
+        <div class="titleblock">
+          <h1>Leo Card Motion</h1>
+          <p>급상승 이슈 → 카드 슬라이드 → 영상</p>
         </div>
-        <div class="status" id="health">booting…</div>
+        <div class="top-actions" id="health">booting…</div>
       </header>
-      <div class="content">
-        <section class="stage-wrap">
+
+      <div class="workspace">
+        <section class="col primary">
           <div class="panel">
-            <div class="toolbar">
-              <div class="kicker" style="margin:0">Preview</div>
-              <div class="actions">
+            <div class="panel-head">
+              <span class="kicker">Preview</span>
+              <div class="controls">
                 <select id="aspect">
-                  <option value="9:16">9:16 PHONE</option>
+                  <option value="9:16">9:16</option>
                   <option value="16:9">16:9</option>
                   <option value="1:1">1:1</option>
                 </select>
-                <select id="engine" title="렌더 엔진">
+                <select id="engine">
                   <option value="hyperframes" selected>Hyperframes</option>
-                  <option value="auto">auto (HF→PW)</option>
+                  <option value="auto">auto</option>
                   <option value="playwright">Playwright</option>
-                  <option value="remotion">Remotion특화</option>
+                  <option value="remotion">Remotion</option>
                 </select>
                 <button class="btn" id="btnRefresh" type="button">이슈 새로고침</button>
                 <button class="btn primary" id="btnBuild" type="button">카드 생성</button>
@@ -53,51 +47,51 @@
                 <button class="btn" id="btnPush" type="button">Timeline 전송</button>
               </div>
             </div>
-            <div class="stage" id="stage"></div>
-            <div class="status" id="projStatus" style="margin-top:8px">프로젝트 없음</div>
+            <div class="stage-frame">
+              <div class="stage" id="stage"><div class="empty">카드를 생성하면 여기에 미리보기가 뜹니다</div></div>
+            </div>
+            <div class="status" id="projStatus">프로젝트 없음</div>
           </div>
 
           <div class="panel">
             <div class="kicker">트렌드 이슈</div>
             <div class="chips" id="catChips"></div>
             <div class="issue-list" id="issueList"></div>
-            <div class="status" id="trendStatus" style="margin-top:8px"></div>
+            <div class="status" id="trendStatus"></div>
             <div class="ticker" id="ticker"></div>
           </div>
 
-          <div class="composer">
-            <div class="box">
-              <h4>카드 템플릿</h4>
-              <div class="chips" id="tplChips"></div>
-            </div>
-            <div class="box">
-              <h4>모션 프리셋</h4>
-              <div class="chips" id="motionChips"></div>
-            </div>
-            <div class="box">
-              <h4>구성</h4>
-              <div class="status">훅 → 본론 → 결론 구조로 자동 배치됩니다.</div>
-            </div>
-            <div class="box">
-              <h4>출력</h4>
-              <div class="status">프리뷰 HTML + Hyperframes MP4. Timeline 전송 지원.</div>
+          <div class="panel">
+            <div class="kicker">생성 옵션</div>
+            <div class="options-grid">
+              <div>
+                <div class="label">카드 템플릿</div>
+                <div class="chips" id="tplChips"></div>
+              </div>
+              <div>
+                <div class="label">모션</div>
+                <div class="chips" id="motionChips"></div>
+              </div>
             </div>
           </div>
         </section>
 
-        <aside class="side">
-          <div class="panel">
+        <section class="col side">
+          <div class="panel sticky">
             <div class="kicker">슬라이드 보드</div>
             <div class="slides" id="slides"></div>
           </div>
           <div class="panel" id="editor">
-            <div class="status">슬라이드를 선택하면 여기서 편집합니다.</div>
+            <div class="status">슬라이드를 선택하면 편집할 수 있습니다</div>
           </div>
-        </aside>
+        </section>
       </div>
     </div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="static/app.js?v=0.4.1"></script>
+  <script>
+    window.APP_BASE = "/cards";
+  </script>
+  <script src="/cards/static/app.js?v=0.4.2"></script>
 </body>
 </html>
