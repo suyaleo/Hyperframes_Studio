@@ -1,0 +1,31 @@
+name: leo-card-motion
+services:
+  web:
+    build: .
+    image: leo-card-motion:local
+    container_name: leo-card-motion-web
+    env_file:
+      - .env
+    restart: unless-stopped
+    shm_size: "1gb"
+    environment:
+      LT_TIMELINE_URL: ${LT_TIMELINE_URL:-http://leo-timeline-web:8000}
+      LT_TIMELINE_TOKEN: ${LT_TIMELINE_TOKEN:-}
+      PRODUCER_LOW_MEMORY_MODE: "1"
+      HYPERFRAMES_EXTRACT_CACHE_DIR: /tmp/hyperframes-extract-cache
+      LCM_DEFAULT_ENGINE: ${LCM_DEFAULT_ENGINE:-hyperframes}
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./compositions:/app/compositions
+      - ./web:/app/web
+      - /mnt/nas/uploads/leo-card-motion/prod:/mnt/nas/uploads/leo-card-motion/prod:rw
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8770/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+networks:
+  edge:
+    external: true

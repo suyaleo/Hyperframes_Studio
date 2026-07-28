@@ -1,0 +1,28 @@
+{
+  "issue_categories": [
+    {"id": "rising", "label": "급상승 이슈"},
+    {"id": "economy", "label": "경제"},
+    {"id": "it", "label": "IT"},
+    {"id": "politics", "label": "정치"},
+    {"id": "life", "label": "라이프"}
+  ],
+  "card_templates": [
+    {"id": "headline", "label": "헤드라인", "kind": "headline"},
+    {"id": "bullets", "label": "브리핑", "kind": "bullets"},
+    {"id": "chart", "label": "비교/차트", "kind": "chart"},
+    {"id": "quote", "label": "인용", "kind": "quote"},
+    {"id": "cta", "label": "CTA", "kind": "cta"}
+  ],
+  "motion_presets": [
+    {"id": "cut", "label": "컷"},
+    {"id": "zoom", "label": "줌"},
+    {"id": "kinetic", "label": "키네틱"},
+    {"id": "slide", "label": "슬라이드인"}
+  ],
+  "structure": [
+    {"id": "hook", "label": "훅"},
+    {"id": "body", "label": "본론"},
+    {"id": "close", "label": "결론"}
+  ],
+  "aspect_ratios": ["9:16", "16:9", "1:1"]
+}
