@@ -232,15 +232,14 @@ async function saveCard() {
 function setPreview(url) {
   const stage = $("#stage");
   if (!stage) return;
+  const phone = state.aspect === "9:16";
+  stage.classList.toggle("phone-mode", phone);
   if (!url) {
     stage.innerHTML = `<div class="empty">카드를 생성하면 여기서 미리보기 재생됩니다</div>`;
     return;
   }
   const src = withBase(url) + (String(url).includes("?") ? "&" : "?") + "t=" + Date.now();
-  const phone = state.aspect === "9:16";
-  stage.innerHTML = phone
-    ? `<iframe class="phone" src="${src}" title="preview"></iframe>`
-    : `<iframe src="${src}" title="preview" style="width:100%;height:100%;border:0"></iframe>`;
+  stage.innerHTML = `<iframe src="${src}" title="preview"></iframe>`;
 }
 
 async function loadMeta() {
@@ -348,7 +347,7 @@ async function renderProject() {
     const r = data.render || {};
     $("#projStatus").textContent = `렌더: ${r.engine || "-"} · ${r.video_url ? "영상 준비" : "HTML 프리뷰"}`;
     if (r.video_url) {
-      $("#stage").innerHTML = `<video src="${withBase(r.video_url)}?t=${Date.now()}" controls playsinline style="width:100%;height:100%;background:#000;object-fit:contain"></video>`;
+      const st=$("#stage"); if(st){ st.classList.toggle("phone-mode", state.aspect==="9:16"); st.innerHTML = `<video src="${withBase(r.video_url)}?t=${Date.now()}" controls playsinline></video>`; }
     } else {
       setPreview(r.preview_url || state.project.preview_url);
     }

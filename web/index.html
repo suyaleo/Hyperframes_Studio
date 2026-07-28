@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <base href="/cards/"/>
   <title>Leo Card Motion</title>
-  <link rel="stylesheet" href="static/styles.css"/>
+  <link rel="stylesheet" href="static/styles.css?v=0.4.1"/>
   <style>
-    .toast{position:fixed;right:16px;bottom:16px;background:#1c1c1f;border:1px solid rgba(244,241,234,.14);padding:10px 14px;border-radius:12px;z-index:50;font-size:12.5px}
+    .toast{position:fixed;right:16px;bottom:16px;background:#1c1c1f;border:1px solid rgba(244,241,234,.14);padding:10px 14px;border-radius:12px;z-index:50;font-size:12.5px;max-width:min(420px,calc(100vw - 24px))}
     .toast.bad{border-color:rgba(224,138,138,.4);color:#ffd0d0}
   </style>
 </head>
@@ -33,9 +33,9 @@
       <div class="content">
         <section class="stage-wrap">
           <div class="panel">
-            <div class="row" style="justify-content:space-between">
-              <div class="kicker">Preview</div>
-              <div class="row">
+            <div class="toolbar">
+              <div class="kicker" style="margin:0">Preview</div>
+              <div class="actions">
                 <select id="aspect">
                   <option value="9:16">9:16 PHONE</option>
                   <option value="16:9">16:9</option>
@@ -76,11 +76,11 @@
             </div>
             <div class="box">
               <h4>구성</h4>
-              <div class="status">훅 → 본론 → 결론 구조로 자동 배치됩니다. Hyperframes HTML composition으로 저장됩니다.</div>
+              <div class="status">훅 → 본론 → 결론 구조로 자동 배치됩니다.</div>
             </div>
             <div class="box">
               <h4>출력</h4>
-              <div class="status">프리뷰 HTML + MP4(가능 시). Timeline 연동은 다음 패치에서 push bridge 확장.</div>
+              <div class="status">프리뷰 HTML + Hyperframes MP4. Timeline 전송 지원.</div>
             </div>
           </div>
         </section>
@@ -98,6 +98,6 @@
     </div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="static/app.js"></script>
+  <script src="static/app.js?v=0.4.1"></script>
 </body>
 </html>
