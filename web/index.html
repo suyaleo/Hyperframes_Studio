@@ -39,9 +39,13 @@
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.4-2.6L20 11M4 13l2.5 4.6A7 7 0 0 0 18 15"/></svg>
           이슈 갱신
         </button>
-        <button class="studio-button studio-button--primary" id="btnBuild" type="button">
+        <button class="studio-button studio-button--primary" id="btnResearch" type="button" disabled>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4M8 11h6M11 8v6"/></svg>
+          자료 수집
+        </button>
+        <button class="studio-button" id="btnBuild" type="button" disabled>
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>
-          카드 생성
+          AI 카드 생성
         </button>
       </div>
 
@@ -79,7 +83,7 @@
                 <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
               </button>
             </div>
-            <p>현재는 카드 초안을 만들며, AI 리서치는 다음 단계에서 연결됩니다.</p>
+            <p>뉴스·카탈로그에서 근거를 수집한 뒤 생성 단계로 이동합니다.</p>
           </form>
         </div>
         <div class="studio-list__scroll" id="issueList" aria-live="polite">
@@ -152,8 +156,19 @@
               <div><dt>FPS</dt><dd>30</dd></div>
               <div><dt>Resolution</dt><dd id="summaryResolution">1080 × 1920</dd></div>
               <div><dt>Slides</dt><dd id="summarySlides">0</dd></div>
-              <div><dt>Narration</dt><dd class="muted">다음 단계</dd></div>
+              <div><dt>Generation</dt><dd id="summaryGeneration" class="muted">대기</dd></div>
+              <div><dt>Narration</dt><dd id="summaryNarration" class="muted">미생성</dd></div>
             </dl>
+          </section>
+
+          <section class="studio-inspector__section research-summary" aria-labelledby="researchHeading">
+            <div class="section-heading-row">
+              <h3 id="researchHeading">근거 번들</h3>
+              <span class="research-state" id="researchState">NOT COLLECTED</span>
+            </div>
+            <div id="researchContent">
+              <div class="empty-state compact"><strong>수집된 자료가 없습니다</strong><span>이슈 또는 직접 주제를 선택하고 ‘자료 수집’을 실행하세요.</span></div>
+            </div>
           </section>
 
           <section class="studio-inspector__section" aria-labelledby="templateHeading">

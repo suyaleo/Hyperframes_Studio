@@ -33,3 +33,13 @@ def test_ai_trend_category_is_declared() -> None:
     categories = json.loads((ROOT / "data/categories.json").read_text(encoding="utf-8"))
 
     assert {item["id"] for item in categories["issue_categories"]} >= {"rising", "ai"}
+
+
+def test_research_first_controls_are_present() -> None:
+    html = (ROOT / "web/index.html").read_text(encoding="utf-8")
+
+    assert 'id="btnResearch"' in html
+    assert 'id="btnBuild"' in html
+    assert 'id="researchContent"' in html
+    assert 'id="summaryGeneration"' in html
+    assert 'id="summaryNarration"' in html

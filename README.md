@@ -8,6 +8,8 @@ Hyperframes Studio turns a live issue or a user-supplied topic into evidence-bac
 
 - RSS issue discovery with category filters
 - AI trend discovery combines current news with the MIT-licensed [Awesome AI Agents](https://github.com/slavakurilyak/awesome-ai-agents) catalog; catalog dates and star counts are snapshot metadata, not real-time GitHub measurements
+- Persistent research bundles with evidence URLs, retrieval timestamps, provider status, image-license warnings, and per-card citations
+- oMLX 0.5.x structured-output storyboard generation with an explicitly labeled deterministic fallback when authentication or model configuration is unavailable
 - Editable headline, bullet, chart, quote, and CTA cards
 - Hyperframes-compatible HTML composition output
 - Remotion, Hyperframes, Playwright, and FFmpeg render adapters
@@ -39,6 +41,8 @@ uv run uvicorn api.main:app --host 127.0.0.1 --port 8770
 ```
 
 Open `http://127.0.0.1:8770` and check `http://127.0.0.1:8770/api/health`.
+
+For native oMLX generation, set `OMLX_BASE_URL=http://127.0.0.1:8000/v1`, `OMLX_API_KEY`, and `OMLX_MODEL` in an untracked `.env`. Without them, research still works and storyboard generation produces a visibly labeled rule-based review draft.
 
 ## Docker
 

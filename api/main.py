@@ -13,6 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from api.compose import build_cards_from_issue, get_project, list_projects, project_to_html, save_project
+from api.omlx import OmlxError, generate_storyboard, get_omlx_status
+from api.research import collect_research, get_research_bundle, list_research_bundles
 from api.settings import (
     DEFAULT_PORT,
     DISPLAY_NAME,
@@ -63,6 +65,30 @@ class RenderIn(BaseModel):
     engine: str | None = None
 
 
+class ResearchIn(BaseModel):
+    issue_id: str | None = None
+    query: str | None = None
+    category: str = "rising"
+    max_sources: int = Field(default=8, ge=3, le=12)
+
+
+class StoryboardIn(BaseModel):
+    research_id: str
+    template_ids: list[str] = Field(default_factory=lambda: ["headline", "bullets", "chart", "quote", "cta"])
+    motion: str = "zoom"
+    aspect_ratio: str = "9:16"
+    seconds_per_card: float = Field(default=3.0, ge=1.0, le=12.0)
+    allow_fallback: bool = True
+
+
+def _resolve_issue(issue_id: str | None, category: str) -> dict[str, Any] | None:
+    trends = get_trends(category=category)
+    items = trends.get("items") or []
+    if issue_id:
+        return next((item for item in items if item.get("id") == issue_id), None)
+    return items[0] if items else None
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return (WEB / "index.html").read_text(encoding="utf-8")
@@ -75,7 +101,9 @@ def health():
         and (os.environ.get("LT_TIMELINE_TOKEN") or os.environ.get("LT_SINGLE_USER_TOKEN") or "").strip()
     )
     omlx_configured = bool(
-        (os.environ.get("OMLX_BASE_URL") or "").strip() and (os.environ.get("OMLX_MODEL") or "").strip()
+        (os.environ.get("OMLX_BASE_URL") or "").strip()
+        and (os.environ.get("OMLX_API_KEY") or "").strip()
+        and (os.environ.get("OMLX_MODEL") or "").strip()
     )
     return {
         "ok": True,
@@ -98,6 +126,11 @@ def version():
     return {"service": SERVICE_SLUG, "version": VERSION}
 
 
+@app.get("/api/ai/status")
+def ai_status():
+    return {"ok": True, "omlx": get_omlx_status()}
+
+
 @app.get("/api/meta")
 def meta():
     cats = json.loads((DATA / "categories.json").read_text(encoding="utf-8"))
@@ -107,6 +140,37 @@ def meta():
 @app.get("/api/trends")
 def trends(category: str = "rising", force: bool = False):
     return get_trends(category=category, force=force)
+
+
+@app.get("/api/research")
+def research_list():
+    return {"ok": True, "items": list_research_bundles()}
+
+
+@app.get("/api/research/{research_id}")
+def research_get(research_id: str):
+    bundle = get_research_bundle(research_id)
+    if not bundle:
+        raise HTTPException(404, "research bundle not found")
+    return {"ok": True, "research": bundle}
+
+
+@app.post("/api/research")
+def research_create(body: ResearchIn):
+    selected_issue = _resolve_issue(body.issue_id, body.category) if body.issue_id else None
+    query = (body.query or (selected_issue or {}).get("title") or "").strip()
+    if not query:
+        raise HTTPException(400, "query or issue required")
+    try:
+        bundle = collect_research(
+            query,
+            category=body.category,
+            selected_issue=selected_issue,
+            max_sources=body.max_sources,
+        )
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    return {"ok": True, "research": bundle}
 
 
 @app.get("/api/projects")
@@ -133,12 +197,7 @@ def project_build(body: BuildIn):
         "id": body.issue_id or "manual",
     }
     if body.issue_id or not body.title:
-        tr = get_trends(category=body.category)
-        found = None
-        if body.issue_id:
-            found = next((x for x in tr.get("items") or [] if x.get("id") == body.issue_id), None)
-        if not found and (tr.get("items") or []):
-            found = tr["items"][0]
+        found = _resolve_issue(body.issue_id, body.category)
         if found:
             issue = found
     if not issue.get("title"):
@@ -156,6 +215,77 @@ def project_build(body: BuildIn):
     }
     project = save_project(project)
     return {"ok": True, "project": project}
+
+
+@app.post("/api/storyboards/generate")
+def storyboard_generate(body: StoryboardIn):
+    bundle = get_research_bundle(body.research_id)
+    if not bundle:
+        raise HTTPException(404, "research bundle not found")
+
+    generation_warning = ""
+    try:
+        generated = generate_storyboard(bundle, body.template_ids)
+        cards = generated["cards"]
+        title = generated["title"]
+        summary = generated["summary"]
+    except OmlxError as error:
+        if not body.allow_fallback:
+            raise HTTPException(503, detail=str(error)) from error
+        evidence = bundle.get("evidence") or []
+        first = evidence[0] if evidence else {}
+        fallback_issue = {
+            "title": bundle.get("query"),
+            "summary": first.get("excerpt") or "수집된 자료를 바탕으로 만든 검토용 초안입니다.",
+            "source": first.get("source") or "Research bundle",
+            "category": bundle.get("category"),
+        }
+        cards = build_cards_from_issue(fallback_issue, template_ids=body.template_ids)
+        citation = first.get("id")
+        for card in cards:
+            card["citations"] = [citation] if citation else []
+            card["narration"] = ""
+            card["visual_query"] = ""
+        title = str(bundle.get("query") or "Research storyboard")
+        summary = str(fallback_issue["summary"])
+        generation_warning = str(error)
+        generated = {
+            "mode": "deterministic-fallback",
+            "model": None,
+            "usage": {},
+        }
+
+    project = {
+        "id": uuid4().hex[:10],
+        "title": title,
+        "issue": {
+            "title": bundle.get("query"),
+            "summary": summary,
+            "category": bundle.get("category"),
+            "source": "Research bundle",
+            "id": bundle.get("id"),
+        },
+        "research_bundle_id": bundle["id"],
+        "cards": cards,
+        "motion": body.motion,
+        "aspect_ratio": body.aspect_ratio,
+        "seconds_per_card": body.seconds_per_card,
+        "status": "draft",
+        "generation": {
+            "mode": generated["mode"],
+            "model": generated.get("model"),
+            "usage": generated.get("usage") or {},
+            "warning": generation_warning,
+            "at": datetime.now(UTC).isoformat(),
+        },
+    }
+    project = save_project(project)
+    return {
+        "ok": True,
+        "project": project,
+        "generation": project["generation"],
+        "research": bundle,
+    }
 
 
 @app.post("/api/projects/{pid}/save")

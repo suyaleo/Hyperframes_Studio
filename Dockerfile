@@ -46,7 +46,7 @@ ENV PATH="/app/.venv/bin:/opt/hyperframes/node_modules/.bin:${PATH}" \
     HYPERFRAMES_BROWSER_PATH=/ms-playwright/chromium_headless_shell-1148/chrome-linux/headless_shell
 
 RUN useradd --create-home --uid 10001 appuser \
-  && mkdir -p /data/output /data/compositions/projects /data/compositions/remotion \
+  && mkdir -p /data/output /data/research /data/compositions/projects /data/compositions/remotion \
   && chown -R appuser:appuser /app /data /home/appuser
 
 USER appuser

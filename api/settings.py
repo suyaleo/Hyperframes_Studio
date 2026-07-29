@@ -4,7 +4,10 @@ import json
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
 MANIFEST = json.loads((ROOT / "studio.json").read_text(encoding="utf-8"))
 
 DISPLAY_NAME: str = MANIFEST["displayName"]
@@ -20,10 +23,11 @@ COMPOSITIONS_DIR = RUNTIME_ROOT / "compositions"
 PROJECTS_DIR = COMPOSITIONS_DIR / "projects"
 REMOTION_EXPORT_DIR = COMPOSITIONS_DIR / "remotion"
 REMOTION_TEMPLATE_DIR = ROOT / "remotion-template"
+RESEARCH_DIR = RUNTIME_ROOT / "research"
 
 
 def ensure_runtime_directories() -> None:
-    for path in (OUTPUT_DIR, PROJECTS_DIR, REMOTION_EXPORT_DIR):
+    for path in (OUTPUT_DIR, PROJECTS_DIR, REMOTION_EXPORT_DIR, RESEARCH_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
 

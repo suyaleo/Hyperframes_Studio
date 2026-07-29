@@ -15,6 +15,8 @@ const state = {
   templates: ["headline", "bullets", "chart", "quote", "cta"],
   meta: null,
   health: null,
+  aiStatus: null,
+  research: null,
   previewIndex: 0,
   previewPlaying: false,
   renderRunning: false,
@@ -138,12 +140,38 @@ function renderTrends() {
     button.addEventListener("click", () => {
       state.selectedIssueId = button.dataset.issueId;
       state.manualTopic = "";
+      state.research = null;
       $("#topicInput").value = "";
       renderTrends();
+      renderResearch();
       updateProjectReadiness();
     });
   });
   $("#issueCount").textContent = `${state.trends.length}개 항목 · 1개 선택`;
+}
+
+function renderResearch() {
+  const box = $("#researchContent");
+  const badge = $("#researchState");
+  const research = state.research;
+  if (!research) {
+    badge.textContent = "NOT COLLECTED";
+    badge.removeAttribute("data-state");
+    box.innerHTML = `<div class="empty-state compact"><strong>수집된 자료가 없습니다</strong><span>이슈 또는 직접 주제를 선택하고 ‘자료 수집’을 실행하세요.</span></div>`;
+    return;
+  }
+  const evidence = research.evidence || [];
+  badge.textContent = `${research.status.toUpperCase()} · ${evidence.length}`;
+  badge.dataset.state = research.status === "complete" ? "ready" : "partial";
+  const rows = evidence.map((item, index) => {
+    const tag = `E${index + 1}`;
+    const content = `<span class="evidence-id">${tag}</span><span class="evidence-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.source)} · ${escapeHtml(item.published_at || "시각 미상")}</span></span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 5h5v5M10 14 19 5M19 14v5H5V5h5"/></svg>`;
+    return item.url
+      ? `<a class="evidence-row" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" title="근거 원문 열기">${content}</a>`
+      : `<div class="evidence-row">${content}</div>`;
+  }).join("");
+  const warnings = (research.warnings || []).map((warning) => `<p class="research-warning">${escapeHtml(warning)}</p>`).join("");
+  box.innerHTML = `<p class="research-query">${escapeHtml(research.query)}</p><div class="evidence-list">${rows || "<p>근거 없음</p>"}</div>${warnings ? `<div class="research-warnings">${warnings}</div>` : ""}`;
 }
 
 function renderCategories() {
@@ -156,8 +184,10 @@ function renderCategories() {
       state.category = button.dataset.category;
       state.selectedIssueId = null;
       state.manualTopic = "";
+      state.research = null;
       $("#topicInput").value = "";
       renderCategories();
+      renderResearch();
       await loadTrends(true);
     });
   });
@@ -342,7 +372,18 @@ function renderEditor() {
     fields = `<label>제목<input id="f_title" value="${escapeHtml(card.title)}"/></label><label>본문<textarea id="f_body">${escapeHtml(card.body)}</textarea></label><label>버튼 문구<input id="f_button" value="${escapeHtml(card.button)}"/></label>`;
   }
 
-  editor.innerHTML = `<div class="editor-heading"><h3>선택 카드 편집</h3><span class="source-kind">${escapeHtml(card.kind)}</span></div><div class="editor-fields">${fields}</div><div class="save-row"><button class="studio-button" id="btnSaveCard" type="button">변경 저장</button></div>`;
+  const evidence = state.research?.evidence || [];
+  const citations = (card.citations || []).map((citation) => {
+    const index = evidence.findIndex((item) => item.id === citation);
+    const item = evidence[index];
+    const label = index >= 0 ? `E${index + 1}` : citation;
+    return item?.url
+      ? `<a class="citation-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(item.title)}">${escapeHtml(label)}</a>`
+      : `<span class="citation-link">${escapeHtml(label)}</span>`;
+  }).join("");
+  const citationBlock = `<div class="card-citations"><span>인용 근거</span>${citations || '<span class="muted">없음</span>'}</div>`;
+  const productionFields = `<label>나레이션 초안<textarea id="f_narration" rows="3" placeholder="oMLX 생성 또는 직접 입력">${escapeHtml(card.narration)}</textarea></label><label>이미지 검색어<input id="f_visual_query" value="${escapeHtml(card.visual_query)}" placeholder="예: on-device AI video editing"/></label>`;
+  editor.innerHTML = `<div class="editor-heading"><h3>선택 카드 편집</h3><span class="source-kind">${escapeHtml(card.kind)}</span></div>${citationBlock}<div class="editor-fields">${fields}${productionFields}</div><div class="save-row"><button class="studio-button" id="btnSaveCard" type="button">변경 저장</button></div>`;
   editor.querySelectorAll("input, textarea").forEach((field) => field.addEventListener("input", () => { $("#unsavedMark").hidden = false; }));
   $("#btnSaveCard").addEventListener("click", saveCard);
 }
@@ -357,6 +398,8 @@ async function saveCard() {
   else if (card.kind === "chart") Object.assign(patch, { title: value("f_title"), left_label: value("f_left_label"), left_value: value("f_left_value"), right_label: value("f_right_label"), right_value: value("f_right_value"), unit: value("f_unit") });
   else if (card.kind === "quote") Object.assign(patch, { quote: value("f_quote"), attribution: value("f_attr") });
   else Object.assign(patch, { title: value("f_title"), body: value("f_body"), button: value("f_button") });
+  patch.narration = value("f_narration");
+  patch.visual_query = value("f_visual_query");
 
   try {
     const data = await api(`/api/projects/${state.project.id}/cards/update`, { method: "POST", body: JSON.stringify({ card_id: state.selectedCardId, patch }) });
@@ -365,6 +408,7 @@ async function saveCard() {
     renderSlides();
     renderEditor();
     paintPreview();
+    updateSummary();
     toast("카드 변경사항을 저장했습니다.");
   } catch (error) {
     toast(error.message, true);
@@ -382,6 +426,12 @@ function updateSummary() {
   const duration = cards.length * Number(state.project?.seconds_per_card || 3);
   $("#summaryDuration").textContent = cards.length ? `${duration}s` : "—";
   $("#summarySlides").textContent = String(cards.length);
+  const narrated = cards.filter((card) => String(card.narration || "").trim()).length;
+  $("#summaryNarration").textContent = cards.length ? `${narrated}/${cards.length} 초안` : "미생성";
+  const generation = state.project?.generation;
+  $("#summaryGeneration").textContent = generation
+    ? (generation.mode === "omlx" ? generation.model || "oMLX" : "규칙 기반 초안")
+    : "대기";
   $("#compositionId").textContent = state.project?.id || "선택 없음";
   $("#canvasHeading").textContent = state.project?.title || state.manualTopic || "새 프로젝트";
   $("#activeCardLabel").textContent = state.selectedCardId ? `SELECTED · ${state.selectedCardId}` : "NO SELECTION";
@@ -394,7 +444,14 @@ function updateSummary() {
 }
 
 function updateProjectReadiness() {
-  $("#btnBuild").disabled = !(state.selectedIssueId || state.manualTopic);
+  const hasInput = Boolean(state.selectedIssueId || state.manualTopic);
+  const hasResearch = Boolean(state.research?.id);
+  const researchButton = $("#btnResearch");
+  const buildButton = $("#btnBuild");
+  researchButton.disabled = !hasInput;
+  buildButton.disabled = !hasResearch;
+  researchButton.classList.toggle("studio-button--primary", !hasResearch);
+  buildButton.classList.toggle("studio-button--primary", hasResearch);
 }
 
 async function loadMeta() {
@@ -428,9 +485,7 @@ async function loadHealth() {
   const element = $("#health");
   try {
     state.health = await api("/api/health");
-    const ready = state.health.hyperframes && state.health.ffmpeg;
-    element.dataset.state = ready ? "ready" : "error";
-    element.innerHTML = `<span class="status-dot" aria-hidden="true"></span> ${ready ? "로컬 렌더 준비" : "렌더 의존성 확인 필요"}`;
+    renderRuntimeStatus();
     $("#btnPush").disabled = !state.health.timeline_configured;
     $("#pushHint").textContent = state.health.timeline_configured
       ? "현재 프로젝트를 연결된 Timeline으로 전송합니다."
@@ -443,19 +498,79 @@ async function loadHealth() {
   }
 }
 
+function renderRuntimeStatus() {
+  if (!state.health) return;
+  const rendererReady = state.health.hyperframes && state.health.ffmpeg;
+  const aiLabel = !state.aiStatus
+    ? "oMLX 확인 중"
+    : state.aiStatus.configured
+      ? `oMLX · ${state.aiStatus.model}`
+      : state.aiStatus.reachable ? "oMLX 인증 필요" : "oMLX 오프라인";
+  $("#health").dataset.state = rendererReady ? "ready" : "error";
+  $("#health").innerHTML = `<span class="status-dot" aria-hidden="true"></span> ${rendererReady ? "로컬 렌더 준비" : "렌더 확인 필요"} · ${escapeHtml(aiLabel)}`;
+}
+
+async function loadAiStatus() {
+  try {
+    const data = await api("/api/ai/status");
+    state.aiStatus = data.omlx;
+    renderRuntimeStatus();
+    renderDependencies();
+  } catch (error) {
+    state.aiStatus = {
+      reachable: false,
+      authenticated: false,
+      configured: false,
+      reason: error.message,
+    };
+    renderRuntimeStatus();
+    renderDependencies();
+  }
+}
+
 function renderDependencies() {
   const health = state.health || {};
+  const ai = state.aiStatus || {};
   const dependencies = [
-    ["Hyperframes", Boolean(health.hyperframes)],
-    ["FFmpeg", Boolean(health.ffmpeg)],
-    ["Playwright", Boolean(health.playwright)],
-    ["oMLX", Boolean(health.omlx_configured)],
+    ["Hyperframes", Boolean(health.hyperframes), "CHECK"],
+    ["FFmpeg", Boolean(health.ffmpeg), "CHECK"],
+    ["Playwright", Boolean(health.playwright), "CHECK"],
+    ["oMLX", Boolean(ai.configured), ai.reachable ? (ai.authenticated ? "MODEL" : "AUTH") : "OFFLINE"],
   ];
-  $("#dependencyGrid").innerHTML = dependencies.map(([name, ready]) => `<div class="dependency" data-ready="${ready}"><span>${name}</span><b>${ready ? "READY" : name === "oMLX" ? "NOT SET" : "CHECK"}</b></div>`).join("");
+  $("#dependencyGrid").innerHTML = dependencies.map(([name, ready, missing]) => `<div class="dependency" data-ready="${ready}" title="${name === "oMLX" ? escapeHtml(ai.reason || "") : ""}"><span>${name}</span><b>${ready ? "READY" : missing}</b></div>`).join("");
+}
+
+async function collectResearch() {
+  if (!(state.selectedIssueId || state.manualTopic)) return;
+  const button = $("#btnResearch");
+  const original = button.innerHTML;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.textContent = "근거 수집 중…";
+  try {
+    const body = {
+      category: state.category,
+      max_sources: 8,
+    };
+    if (state.manualTopic) body.query = state.manualTopic;
+    else body.issue_id = state.selectedIssueId;
+    const data = await api("/api/research", { method: "POST", body: JSON.stringify(body) });
+    state.research = data.research;
+    renderResearch();
+    updateProjectReadiness();
+    const count = state.research.evidence?.length || 0;
+    toast(`근거 ${count}건을 수집했습니다${state.research.status === "partial" ? " · 추가 확인 필요" : ""}.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    button.innerHTML = original;
+    button.removeAttribute("aria-busy");
+    updateProjectReadiness();
+  }
 }
 
 async function buildProject() {
-  if (!(state.selectedIssueId || state.manualTopic)) return;
+  if (!state.research?.id) return;
   const button = $("#btnBuild");
   const original = button.innerHTML;
   button.disabled = true;
@@ -463,20 +578,16 @@ async function buildProject() {
   button.textContent = "카드 구성 중…";
   try {
     const body = {
-      category: state.category,
+      research_id: state.research.id,
       template_ids: state.templates,
       motion: state.motion,
       aspect_ratio: state.aspect,
       seconds_per_card: 3,
+      allow_fallback: true,
     };
-    if (state.manualTopic) {
-      body.title = state.manualTopic;
-      body.summary = "사용자가 직접 입력한 주제로 만든 카드 초안입니다. AI 기반 근거 수집은 다음 개발 단계에서 연결됩니다.";
-    } else {
-      body.issue_id = state.selectedIssueId;
-    }
-    const data = await api("/api/projects/build", { method: "POST", body: JSON.stringify(body) });
+    const data = await api("/api/storyboards/generate", { method: "POST", body: JSON.stringify(body) });
     state.project = data.project;
+    state.research = data.research;
     state.selectedCardId = state.project.cards?.[0]?.id || null;
     state.previewIndex = 0;
     state.previewPlaying = false;
@@ -485,7 +596,12 @@ async function buildProject() {
     paintPreview();
     updateSummary();
     $("#projStatus").textContent = `프로젝트 ${state.project.id} · 카드 ${state.project.cards.length}장`;
-    toast(`카드 ${state.project.cards.length}장을 생성했습니다.`);
+    renderResearch();
+    if (data.generation?.mode === "omlx") {
+      toast(`oMLX가 근거 기반 카드 ${state.project.cards.length}장을 생성했습니다.`);
+    } else {
+      toast(`oMLX 미설정 · 규칙 기반 검토용 카드 ${state.project.cards.length}장을 생성했습니다.`, true);
+    }
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -569,6 +685,7 @@ async function pushTimeline() {
 
 function wireControls() {
   $("#btnRefresh").addEventListener("click", () => loadTrends(true));
+  $("#btnResearch").addEventListener("click", collectResearch);
   $("#btnBuild").addEventListener("click", buildProject);
   $("#btnRender").addEventListener("click", openRenderModal);
   $("#btnRunRender").addEventListener("click", runRender);
@@ -581,7 +698,9 @@ function wireControls() {
     if (!topic) return toast("직접 만들 주제를 입력하세요.", true);
     state.manualTopic = topic;
     state.selectedIssueId = null;
+    state.research = null;
     renderTrends();
+    renderResearch();
     updateSummary();
     updateProjectReadiness();
     toast("직접 주제를 선택했습니다.");
@@ -636,6 +755,14 @@ function wireControls() {
 async function loadProject(projectId) {
   const data = await api(`/api/projects/${projectId}`);
   state.project = data.project;
+  if (state.project.research_bundle_id) {
+    try {
+      const researchData = await api(`/api/research/${state.project.research_bundle_id}`);
+      state.research = researchData.research;
+    } catch (_) {
+      state.research = null;
+    }
+  }
   state.motion = state.project.motion || state.motion;
   state.aspect = state.project.aspect_ratio || state.aspect;
   state.engine = state.project.engine_hint === "remotion-adapter" ? "remotion" : state.project.engine_hint || state.engine;
@@ -645,7 +772,9 @@ async function loadProject(projectId) {
   renderMotionOptions();
   renderSlides();
   renderEditor();
+  renderResearch();
   updateSummary();
+  updateProjectReadiness();
   if (state.project.render?.video_url) {
     $("#stage").innerHTML = `<video src="${withBase(state.project.render.video_url)}?t=${Date.now()}" controls playsinline aria-label="렌더된 Hyperframes 영상"></video>`;
   } else {
@@ -657,9 +786,11 @@ async function loadProject(projectId) {
 (async function init() {
   setupTheme();
   wireControls();
+  renderResearch();
   updateSummary();
+  updateProjectReadiness();
   try {
-    await Promise.all([loadMeta(), loadHealth()]);
+    await Promise.all([loadMeta(), loadHealth(), loadAiStatus()]);
     await loadTrends(true);
     const projectId = new URLSearchParams(location.search).get("project");
     if (projectId) await loadProject(projectId);

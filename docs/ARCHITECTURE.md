@@ -17,7 +17,7 @@ Hyperframes Studio is a `local-api` Web application and a `docker-service` distr
 ```text
 issue or keyword
   -> source-aware research bundle
-  -> oMLX structured storyboard
+  -> oMLX JSON Schema storyboard (or labeled deterministic fallback)
   -> shared storyboard IR
   -> Hyperframes HTML + Remotion props
   -> narration/captions + rendered output
@@ -30,3 +30,5 @@ Provider URLs and credentials are runtime configuration. Docker connects to host
 - News RSS feeds provide time-sensitive issue discovery.
 - `slavakurilyak/awesome-ai-agents` provides a runtime-fetched AI project catalog with explicit source attribution. It enriches research candidates but is not treated as a real-time GitHub ranking.
 - Future MCP and oMLX research providers must retain evidence URLs and provider timestamps when they produce cards.
+
+Research bundles are stored beneath the configured runtime data directory and referenced by ID from projects. Generated cards retain evidence IDs, narration drafts, and visual-search queries so rendering never has to reconstruct provenance from display text.

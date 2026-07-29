@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime
 from html import unescape
 from typing import Any
+from urllib.parse import quote_plus
 
 import feedparser
 import httpx
@@ -69,6 +70,15 @@ def _parse_feed(url: str, category: str) -> list[dict[str, Any]]:
             summary = re.sub(r"<[^>]+>", " ", summary)
             summary = re.sub(r"\s+", " ", summary).strip()
         summary = unescape(summary)
+        image_url = ""
+        media = e.get("media_content") or e.get("media_thumbnail") or []
+        if media and isinstance(media[0], dict):
+            image_url = str(media[0].get("url") or "")
+        if not image_url:
+            for enclosure in e.get("enclosures") or []:
+                if str(enclosure.get("type") or "").startswith("image/"):
+                    image_url = str(enclosure.get("href") or enclosure.get("url") or "")
+                    break
         items.append(
             {
                 "id": _id(link or title),
@@ -78,6 +88,8 @@ def _parse_feed(url: str, category: str) -> list[dict[str, Any]]:
                 "category": category,
                 "source": parsed.feed.get("title") if getattr(parsed, "feed", None) else category,
                 "published": e.get("published") or e.get("updated") or "",
+                "source_kind": "news",
+                "image_url": image_url,
             }
         )
     return items
@@ -124,6 +136,14 @@ def _fetch_awesome_ai_agents() -> list[dict[str, Any]]:
     items = [item for agent in agents if (item := _catalog_item(agent))]
     items.sort(key=lambda item: int(item.get("stars") or 0), reverse=True)
     return items[:18]
+
+
+def search_news(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    normalized = " ".join(str(query or "").split()).strip()
+    if not normalized:
+        return []
+    url = f"https://news.google.com/rss/search?q={quote_plus(normalized)}&hl=ko&gl=KR&ceid=KR:ko"
+    return _parse_feed(url, "research")[: max(1, min(int(limit), 20))]
 
 
 def get_trends(category: str = "rising", force: bool = False) -> dict[str, Any]:

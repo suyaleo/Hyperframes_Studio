@@ -18,6 +18,8 @@ compositions/projects/*
 !compositions/projects/.gitkeep
 compositions/remotion/*
 !compositions/remotion/.gitkeep
+research/*
+!research/.gitkeep
 *.mp4
 *.webm
 *.log

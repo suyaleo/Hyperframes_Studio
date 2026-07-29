@@ -12,6 +12,8 @@ compositions/projects/*
 !compositions/projects/.gitkeep
 compositions/remotion/*
 !compositions/remotion/.gitkeep
+research/*
+!research/.gitkeep
 data/oauth/*
 !data/oauth/.gitkeep
 *.mp4
