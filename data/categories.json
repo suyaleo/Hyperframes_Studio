@@ -1,6 +1,7 @@
 {
   "issue_categories": [
     {"id": "rising", "label": "급상승 이슈"},
+    {"id": "ai", "label": "AI 트렌드"},
     {"id": "economy", "label": "경제"},
     {"id": "it", "label": "IT"},
     {"id": "politics", "label": "정치"},

@@ -1,4 +1,5 @@
-"""Real Remotion render adapter for Leo Card Motion."""
+"""Real Remotion render adapter for Hyperframes Studio."""
+
 from __future__ import annotations
 
 import json
@@ -8,11 +9,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-COMP = ROOT / "compositions" / "projects"
-OUT = ROOT / "output"
-REM = ROOT / "compositions" / "remotion"
-TEMPLATE = ROOT / "remotion-template"
+from api.settings import OUTPUT_DIR, PROJECTS_DIR, REMOTION_EXPORT_DIR, REMOTION_TEMPLATE_DIR
+
+COMP = PROJECTS_DIR
+OUT = OUTPUT_DIR
+REM = REMOTION_EXPORT_DIR
+TEMPLATE = REMOTION_TEMPLATE_DIR
 
 
 def export_remotion_project(project_id: str) -> dict[str, Any]:
@@ -23,7 +25,7 @@ def export_remotion_project(project_id: str) -> dict[str, Any]:
     dest = REM / project_id
     dest.mkdir(parents=True, exist_ok=True)
     props = {
-        "title": proj.get("title") or "Leo Card Motion",
+        "title": proj.get("title") or "Hyperframes Studio",
         "aspect_ratio": proj.get("aspect_ratio") or "9:16",
         "secondsPerCard": float(proj.get("seconds_per_card") or 2.5),
         "cards": proj.get("cards") or [],
@@ -60,8 +62,9 @@ def render_remotion_style(project_id: str, fps: int = 30) -> dict[str, Any]:
     # Ensure deps (image build should preinstall; runtime fallback)
     node_modules = TEMPLATE / "node_modules" / "remotion"
     if not node_modules.exists():
+        npm = shutil.which("npm") or "npm"
         r = subprocess.run(
-            [_npx().replace("npx", "npm") if False else shutil.which("npm") or "npm", "install", "--no-fund", "--no-audit"],
+            [npm, "install", "--no-fund", "--no-audit"],
             cwd=str(TEMPLATE),
             capture_output=True,
             text=True,
@@ -100,7 +103,7 @@ def render_remotion_style(project_id: str, fps: int = 30) -> dict[str, Any]:
 
     # also refresh HTML composition with remotion theme for preview file
     try:
-        from compose import get_project, save_project
+        from api.compose import get_project, save_project
 
         proj = get_project(project_id)
         if proj:

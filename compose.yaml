@@ -1,31 +1,39 @@
-name: leo-card-motion
+name: hyperframes-studio
+
 services:
-  web:
-    build: .
-    image: leo-card-motion:local
-    container_name: leo-card-motion-web
-    env_file:
-      - .env
+  app:
+    build:
+      context: .
+      args:
+        VERSION: 0.1.0
+        VCS_REF: ${VCS_REF:-local}
+    image: hyperframes-studio:local
     restart: unless-stopped
     shm_size: "1gb"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      LT_TIMELINE_URL: ${LT_TIMELINE_URL:-http://leo-timeline-web:8000}
+      HYPERFRAMES_DATA_DIR: /data
+      HYPERFRAMES_DEFAULT_ENGINE: ${HYPERFRAMES_DEFAULT_ENGINE:-hyperframes}
+      OMLX_BASE_URL: ${OMLX_BASE_URL:-http://host.docker.internal:8000/v1}
+      OMLX_API_KEY: ${OMLX_API_KEY:-}
+      OMLX_MODEL: ${OMLX_MODEL:-}
+      LT_TIMELINE_URL: ${LT_TIMELINE_URL:-}
       LT_TIMELINE_TOKEN: ${LT_TIMELINE_TOKEN:-}
-      PRODUCER_LOW_MEMORY_MODE: "1"
-      HYPERFRAMES_EXTRACT_CACHE_DIR: /tmp/hyperframes-extract-cache
-      LCM_DEFAULT_ENGINE: ${LCM_DEFAULT_ENGINE:-hyperframes}
+      PRODUCER_LOW_MEMORY_MODE: ${PRODUCER_LOW_MEMORY_MODE:-1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${HYPERFRAMES_STUDIO_PORT:-8770}:8770"
     volumes:
-      - ./data:/app/data
-      - ./output:/app/output
-      - ./compositions:/app/compositions
-      - ./web:/app/web
-      - /mnt/nas/uploads/leo-card-motion/prod:/mnt/nas/uploads/leo-card-motion/prod:rw
-    networks: [edge]
+      - hyperframes-studio-data:/data
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8770/api/health"]
       interval: 30s
       timeout: 5s
+      start_period: 20s
       retries: 5
-networks:
-  edge:
-    external: true
+
+volumes:
+  hyperframes-studio-data:

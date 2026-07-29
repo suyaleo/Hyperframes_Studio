@@ -1,97 +1,253 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="dark">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Leo Card Motion</title>
-  <link rel="stylesheet" href="/cards/static/styles.css?v=0.5.0"/>
+  <meta name="theme-color" content="#16191b"/>
+  <title>Hyperframes Studio</title>
+  <script>
+    (() => {
+      const key = "hyperframes-studio-theme";
+      let saved = null;
+      try { saved = localStorage.getItem(key); } catch (_) { saved = null; }
+      const preference = ["light", "dark", "system"].includes(saved) ? saved : "system";
+      const resolved = preference === "system"
+        ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : preference;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=0.2.0"/>
 </head>
 <body>
-  <div class="app">
-    <aside class="rail" aria-label="navigation">
-      <div class="brand">LC</div>
-      <a class="nav active" href="/cards/"><span>▣</span>스튜디오</a>
-      <a class="nav" href="/app/"><span>▶</span>Timeline</a>
-      <a class="nav" href="/grok/"><span>◎</span>Grok</a>
-    </aside>
+  <div class="studio-shell">
+    <header class="studio-toolbar">
+      <a class="studio-product" href="/" aria-label="Hyperframes Studio 홈">
+        <img class="product-logo product-logo--dark" src="/static/assets/hyperframes-logo-dark.svg" alt="Hyperframes Studio"/>
+        <img class="product-logo product-logo--light" src="/static/assets/hyperframes-logo-light.svg" alt="Hyperframes Studio"/>
+      </a>
 
-    <div class="main">
-      <header class="top">
-        <div class="titleblock">
-          <h1>Leo Card Motion</h1>
-          <p>급상승 이슈 → 카드 슬라이드 → 영상</p>
-        </div>
-        <div class="top-actions" id="health">booting…</div>
-      </header>
-
-      <div class="workspace">
-        <section class="col primary">
-          <div class="panel">
-            <div class="panel-head">
-              <span class="kicker">Preview</span>
-              <div class="controls">
-                <select id="aspect">
-                  <option value="9:16">9:16</option>
-                  <option value="16:9">16:9</option>
-                  <option value="1:1">1:1</option>
-                </select>
-                <select id="engine">
-                  <option value="hyperframes" selected>Hyperframes</option>
-                  <option value="auto">auto</option>
-                  <option value="playwright">Playwright</option>
-                  <option value="remotion">Remotion</option>
-                </select>
-                <button class="btn" id="btnRefresh" type="button">이슈 새로고침</button>
-                <button class="btn primary" id="btnBuild" type="button">카드 생성</button>
-                <button class="btn primary" id="btnRender" type="button">렌더</button>
-                <button class="btn" id="btnPush" type="button">Timeline 전송</button>
-              </div>
-            </div>
-            <div class="stage-frame">
-              <div class="stage" id="stage"><div class="empty">카드를 생성하면 여기에 미리보기가 뜹니다</div></div>
-            </div>
-            <div class="status" id="projStatus">프로젝트 없음</div>
-          </div>
-
-          <div class="panel">
-            <div class="kicker">트렌드 이슈</div>
-            <div class="chips" id="catChips"></div>
-            <div class="issue-list" id="issueList"></div>
-            <div class="status" id="trendStatus"></div>
-            <div class="ticker" id="ticker"></div>
-          </div>
-
-          <div class="panel">
-            <div class="kicker">생성 옵션</div>
-            <div class="options-grid">
-              <div>
-                <div class="label">카드 템플릿</div>
-                <div class="chips" id="tplChips"></div>
-              </div>
-              <div>
-                <div class="label">모션 (전환 스타일 · 미리보기/렌더 모두 적용)</div>
-                <div class="chips" id="motionChips"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="col side">
-          <div class="panel sticky">
-            <div class="kicker">슬라이드 보드</div>
-            <div class="slides" id="slides"></div>
-          </div>
-          <div class="panel" id="editor">
-            <div class="status">슬라이드를 선택하면 편집할 수 있습니다</div>
-          </div>
-        </section>
+      <div class="studio-divider" aria-hidden="true"></div>
+      <div class="studio-toolbar__context">
+        <strong>Issue to Motion</strong>
+        <span>Hyperframes + Remotion</span>
       </div>
-    </div>
+
+      <div class="studio-toolbar__actions">
+        <button class="studio-button" id="btnRefresh" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.4-2.6L20 11M4 13l2.5 4.6A7 7 0 0 0 18 15"/></svg>
+          이슈 갱신
+        </button>
+        <button class="studio-button studio-button--primary" id="btnBuild" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>
+          카드 생성
+        </button>
+      </div>
+
+      <div class="studio-toolbar__status">
+        <span class="connection-status" id="health" data-state="loading" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span> 로컬 엔진 확인 중
+        </span>
+        <label class="theme-field">
+          <span>테마</span>
+          <select id="themePreference" aria-label="화면 테마">
+            <option value="system">시스템</option>
+            <option value="dark">다크</option>
+            <option value="light">라이트</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <main class="studio-workspace">
+      <aside class="studio-list" aria-labelledby="issuesHeading">
+        <div class="studio-panel-heading">
+          <div>
+            <h2 id="issuesHeading">이슈 소스</h2>
+            <small id="issueCount">수집 대기</small>
+          </div>
+          <span class="source-mode" id="sourceMode">LIVE</span>
+        </div>
+        <div class="issue-tools">
+          <div class="category-tabs" id="catChips" role="tablist" aria-label="이슈 카테고리"></div>
+          <form class="topic-form" id="topicForm">
+            <label for="topicInput">직접 주제</label>
+            <div class="topic-form__row">
+              <input id="topicInput" name="topic" type="search" placeholder="예: 온디바이스 AI의 변화" autocomplete="off"/>
+              <button class="icon-button" type="submit" aria-label="입력한 주제 선택" title="입력한 주제 선택">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+              </button>
+            </div>
+            <p>현재는 카드 초안을 만들며, AI 리서치는 다음 단계에서 연결됩니다.</p>
+          </form>
+        </div>
+        <div class="studio-list__scroll" id="issueList" aria-live="polite">
+          <div class="empty-state compact"><span class="spinner" aria-hidden="true"></span><strong>이슈를 수집하고 있습니다</strong></div>
+        </div>
+        <div class="list-footer" id="trendStatus">피드 초기화 중</div>
+      </aside>
+
+      <section class="studio-canvas" aria-labelledby="canvasHeading">
+        <div class="studio-canvas__heading">
+          <div class="canvas-title">
+            <span class="eyebrow">CANVAS</span>
+            <h2 id="canvasHeading">새 프로젝트</h2>
+            <span class="unsaved-mark" id="unsavedMark" hidden>저장 필요</span>
+          </div>
+          <div class="canvas-heading-actions">
+            <label class="compact-field">
+              <span>비율</span>
+              <select id="aspect">
+                <option value="9:16">9:16 세로</option>
+                <option value="16:9">16:9 가로</option>
+                <option value="1:1">1:1 정방형</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="studio-canvas__stage">
+          <button class="canvas-nav canvas-nav--prev" id="btnPrev" type="button" aria-label="이전 카드" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div class="studio-canvas__frame aspect-9-16" id="stageFrame">
+            <div class="stage" id="stage">
+              <div class="empty-state">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 14 2.5-2.5L14 15l2-2 3 3M8 8h.01"/></svg>
+                <strong>이슈를 선택해 카드를 생성하세요</strong>
+                <span>생성된 HTML 카드와 영상이 이 캔버스에서 재생됩니다.</span>
+              </div>
+            </div>
+          </div>
+          <button class="canvas-nav canvas-nav--next" id="btnNext" type="button" aria-label="다음 카드" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+
+        <div class="canvas-transport">
+          <button class="icon-button" id="btnPlay" type="button" aria-label="카드 미리보기 재생" disabled>
+            <svg class="icon-play" aria-hidden="true" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg>
+            <svg class="icon-pause" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>
+          </button>
+          <span class="studio-mono" id="transportTime">00:00 / 00:00</span>
+          <div class="transport-track" aria-hidden="true"><i id="transportProgress"></i></div>
+          <span id="projStatus">프로젝트 없음</span>
+        </div>
+      </section>
+
+      <aside class="studio-inspector" aria-labelledby="inspectorHeading">
+        <div class="studio-panel-heading">
+          <div>
+            <h2 id="inspectorHeading">Composition</h2>
+            <small id="compositionId">선택 없음</small>
+          </div>
+          <span class="engine-badge">HF</span>
+        </div>
+        <div class="studio-inspector__scroll">
+          <section class="studio-inspector__section composition-summary" aria-labelledby="summaryHeading">
+            <h3 id="summaryHeading">출력 요약</h3>
+            <dl>
+              <div><dt>Duration</dt><dd id="summaryDuration">—</dd></div>
+              <div><dt>FPS</dt><dd>30</dd></div>
+              <div><dt>Resolution</dt><dd id="summaryResolution">1080 × 1920</dd></div>
+              <div><dt>Slides</dt><dd id="summarySlides">0</dd></div>
+              <div><dt>Narration</dt><dd class="muted">다음 단계</dd></div>
+            </dl>
+          </section>
+
+          <section class="studio-inspector__section" aria-labelledby="templateHeading">
+            <h3 id="templateHeading">카드 템플릿</h3>
+            <div class="option-grid" id="tplChips"></div>
+          </section>
+
+          <section class="studio-inspector__section" aria-labelledby="motionHeading">
+            <h3 id="motionHeading">모션 프리셋</h3>
+            <div class="option-grid" id="motionChips"></div>
+          </section>
+
+          <section class="studio-inspector__section">
+            <label class="studio-field" for="engine">
+              <span>렌더 엔진</span>
+              <select id="engine">
+                <option value="hyperframes" selected>Hyperframes</option>
+                <option value="auto">자동 폴백</option>
+                <option value="playwright">Playwright</option>
+                <option value="remotion">Remotion</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="studio-inspector__section card-editor" id="editor" aria-live="polite">
+            <div class="empty-state compact"><strong>편집할 카드를 선택하세요</strong><span>아래 시퀀스에서 카드를 선택할 수 있습니다.</span></div>
+          </section>
+
+          <section class="studio-inspector__section inspector-actions">
+            <button class="studio-button studio-button--primary" id="btnRender" type="button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg>
+              영상 렌더
+            </button>
+            <button class="studio-button" id="btnPush" type="button" disabled title="Timeline 연결 정보가 필요합니다">
+              Timeline으로 보내기
+            </button>
+            <p id="pushHint">Timeline 연결 정보가 없어 비활성화되었습니다.</p>
+          </section>
+        </div>
+      </aside>
+    </main>
+
+    <section class="studio-timeline" aria-labelledby="timelineHeading">
+      <div class="studio-timeline__toolbar">
+        <div>
+          <h2 id="timelineHeading">카드 시퀀스</h2>
+          <span>드래그하여 재생 순서를 바꿀 수 있습니다.</span>
+        </div>
+        <div class="timeline-status studio-mono"><span id="activeCardLabel">NO SELECTION</span></div>
+        <label class="timeline-zoom">
+          <span>축소</span>
+          <input id="timelineZoom" type="range" min="140" max="280" step="20" value="200" aria-label="카드 시퀀스 확대/축소"/>
+          <span>확대</span>
+        </label>
+      </div>
+      <div class="studio-timeline__scroll">
+        <div class="slides" id="slides">
+          <div class="timeline-empty"><strong>생성된 카드가 없습니다</strong><span>왼쪽에서 이슈를 고른 뒤 ‘카드 생성’을 실행하세요.</span></div>
+        </div>
+      </div>
+    </section>
   </div>
-  <div id="toast" class="toast" hidden></div>
-  <script>
-    window.APP_BASE = "/cards";
-  </script>
-  <script src="/cards/static/app.js?v=0.5.0"></script>
+
+  <div class="studio-modal-backdrop" id="renderModal" hidden>
+    <section class="studio-production-panel" role="dialog" aria-modal="true" aria-labelledby="renderPanelTitle" tabindex="-1">
+      <header class="production-header">
+        <div><span class="eyebrow">PRODUCTION</span><h2 id="renderPanelTitle">영상 렌더</h2></div>
+        <button class="icon-button" id="btnCloseRender" type="button" aria-label="렌더 패널 닫기">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+      <div class="production-body">
+        <section class="dependency-grid" id="dependencyGrid"></section>
+        <section class="render-progress studio-status" id="renderProgress" data-state="idle" aria-live="polite">
+          <div class="progress-heading"><strong id="renderPhase">준비</strong><span id="renderPercent">0%</span></div>
+          <div class="progress-track"><i id="renderBar"></i></div>
+          <p id="renderMessage">출력 설정을 확인하고 렌더를 시작하세요.</p>
+          <pre id="renderError" hidden></pre>
+        </section>
+        <dl class="production-props">
+          <div><dt>Composition</dt><dd id="renderComposition">—</dd></div>
+          <div><dt>Engine</dt><dd id="renderEngine">Hyperframes</dd></div>
+          <div><dt>Output</dt><dd id="renderOutput">MP4 · H.264</dd></div>
+        </dl>
+      </div>
+      <footer class="production-footer">
+        <button class="studio-button" id="btnCancelRender" type="button">닫기</button>
+        <button class="studio-button studio-button--primary" id="btnRunRender" type="button">렌더 시작</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script>window.APP_BASE = "";</script>
+  <script src="/static/app.js?v=0.2.0"></script>
 </body>
 </html>

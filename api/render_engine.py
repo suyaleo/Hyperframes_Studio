@@ -1,12 +1,17 @@
 from __future__ import annotations
-import asyncio, json, os, shutil, subprocess
+
+import asyncio
+import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "output"
-COMP = ROOT / "compositions" / "projects"
-OUT.mkdir(exist_ok=True)
+from api.settings import OUTPUT_DIR, PROJECTS_DIR
+
+OUT = OUTPUT_DIR
+COMP = PROJECTS_DIR
 
 
 def _which(*names: str) -> str | None:
@@ -68,13 +73,18 @@ def render_with_hyperframes(project_id: str, fps: int = 30) -> dict[str, Any]:
     cmd = _hyperframes_bin() + [
         "render",
         str(comp),
-        "-o", str(out_mp4),
-        "-f", str(max(1, min(int(fps or 30), 60))),
-        "-q", "standard",
-        "--workers", "1",
+        "-o",
+        str(out_mp4),
+        "-f",
+        str(max(1, min(int(fps or 30), 60))),
+        "-q",
+        "standard",
+        "--workers",
+        "1",
         "--low-memory-mode",
         "--no-browser-gpu",
-        "--resolution", res,
+        "--resolution",
+        res,
         "--quiet",
     ]
     env = os.environ.copy()
@@ -119,6 +129,7 @@ def render_with_playwright(project_id: str, fps: int = 30) -> dict[str, Any]:
 
     async def _run() -> Path:
         from playwright.async_api import async_playwright
+
         async with async_playwright() as p:
             browser = await p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
             context = await browser.new_context(
@@ -145,11 +156,31 @@ def render_with_playwright(project_id: str, fps: int = 30) -> dict[str, Any]:
 
     ffmpeg = _which("ffmpeg")
     if not ffmpeg:
-        return {"engine": "playwright-webm", "video_url": f"/output/{project_id}.webm", "path": str(out_webm), "fps": fps}
+        return {
+            "engine": "playwright-webm",
+            "video_url": f"/output/{project_id}.webm",
+            "path": str(out_webm),
+            "fps": fps,
+        }
 
     r = subprocess.run(
-        [ffmpeg, "-y", "-i", str(out_webm), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", str(out_mp4)],
-        capture_output=True, text=True, timeout=180,
+        [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(out_webm),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-an",
+            str(out_mp4),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
     )
     if r.returncode != 0 or not out_mp4.exists():
         return {
@@ -167,7 +198,7 @@ def render_with_playwright(project_id: str, fps: int = 30) -> dict[str, Any]:
 
 
 def render_project(project_id: str, preferred: str = "auto", fps: int = 30) -> dict[str, Any]:
-    default = (os.environ.get("LCM_DEFAULT_ENGINE") or "hyperframes").strip().lower()
+    default = (os.environ.get("HYPERFRAMES_DEFAULT_ENGINE") or "hyperframes").strip().lower()
     if preferred in (None, "", "auto"):
         preferred = default
 
@@ -188,7 +219,8 @@ def render_project(project_id: str, preferred: str = "auto", fps: int = 30) -> d
             if eng == "hyperframes":
                 return render_with_hyperframes(project_id, fps=fps)
             if eng == "remotion":
-                from remotion_adapter import render_remotion_style
+                from api.remotion_adapter import render_remotion_style
+
                 return render_remotion_style(project_id, fps=fps)
             if eng == "ffmpeg":
                 proj = json.loads((COMP / project_id / "project.json").read_text(encoding="utf-8"))
@@ -202,11 +234,31 @@ def render_project(project_id: str, preferred: str = "auto", fps: int = 30) -> d
                 if not ffmpeg:
                     raise RuntimeError("ffmpeg missing")
                 subprocess.run(
-                    [ffmpeg, "-y", "-f", "lavfi", "-i", f"color=c=0x0a0a0b:s={size}:d={dur}", "-vf", "format=yuv420p", "-t", str(dur), str(out_mp4)],
-                    capture_output=True, text=True, timeout=120, check=False,
+                    [
+                        ffmpeg,
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        f"color=c=0x0a0a0b:s={size}:d={dur}",
+                        "-vf",
+                        "format=yuv420p",
+                        "-t",
+                        str(dur),
+                        str(out_mp4),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
                 )
                 if out_mp4.exists():
-                    return {"engine": "ffmpeg-slate", "video_url": f"/output/{project_id}.mp4", "path": str(out_mp4), "note": "placeholder slate"}
+                    return {
+                        "engine": "ffmpeg-slate",
+                        "video_url": f"/output/{project_id}.mp4",
+                        "path": str(out_mp4),
+                        "note": "placeholder slate",
+                    }
                 raise RuntimeError("ffmpeg slate failed")
         except Exception as e:
             errors.append(f"{eng}:{type(e).__name__}:{e}")

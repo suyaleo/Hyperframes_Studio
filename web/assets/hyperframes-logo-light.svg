@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="202" height="34" viewBox="0 0 202 34" role="img" aria-labelledby="title">
+  <title id="title">Hyperframes Studio</title>
+  <g fill="none" stroke="#242321" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8">
+    <path d="M3.5 7.5h11v7h8v-7h8v19h-11v-7h-8v7h-8z"/>
+    <path d="m5 25 7-7 6 4 11-12"/>
+  </g>
+  <text x="40" y="21.5" fill="#242321" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="750">Hyperframes</text>
+  <text x="145" y="21.5" fill="#68645e" font-family="Inter,Arial,sans-serif" font-size="10" font-weight="700" letter-spacing="1.2">STUDIO</text>
+</svg>

@@ -1,6 +1,6 @@
 import React from "react";
 import { Composition } from "remotion";
-import { CardMotion, cardMotionSchema } from "./CardMotion";
+import { CardMotion, type CardMotionProps, cardMotionSchema } from "./CardMotion";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -14,7 +14,7 @@ export const RemotionRoot: React.FC = () => {
         height={1920}
         schema={cardMotionSchema}
         defaultProps={{
-          title: "Leo Card Motion",
+          title: "Hyperframes Studio",
           aspect_ratio: "9:16",
           secondsPerCard: 2.5,
           cards: [
@@ -22,10 +22,11 @@ export const RemotionRoot: React.FC = () => {
           ],
         }}
         calculateMetadata={({ props }) => {
+          const typedProps = props as CardMotionProps;
           const fps = 30;
-          const spc = Number(props.secondsPerCard) || 2.5;
-          const n = Math.max((props.cards || []).length, 1);
-          const aspect = props.aspect_ratio || "9:16";
+          const spc = Number(typedProps.secondsPerCard) || 2.5;
+          const n = Math.max((typedProps.cards || []).length, 1);
+          const aspect = typedProps.aspect_ratio || "9:16";
           const size =
             aspect === "16:9"
               ? { width: 1920, height: 1080 }

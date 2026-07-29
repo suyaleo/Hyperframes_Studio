@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "output"
-DATA = ROOT / "data"
-COMP = ROOT / "compositions"
-OUT.mkdir(exist_ok=True)
-(COMP / "projects").mkdir(parents=True, exist_ok=True)
+from api.settings import COMPOSITIONS_DIR, OUTPUT_DIR, STATIC_DATA_DIR
+
+OUT = OUTPUT_DIR
+DATA = STATIC_DATA_DIR
+COMP = COMPOSITIONS_DIR
 
 
 def _slug(s: str) -> str:
@@ -21,13 +19,7 @@ def _slug(s: str) -> str:
 
 
 def _esc(s: Any) -> str:
-    return (
-        str(s or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def build_cards_from_issue(
@@ -53,7 +45,7 @@ def build_cards_from_issue(
         if tid == "headline":
             cards.append(
                 {
-                    "id": f"c{i+1}",
+                    "id": f"c{i + 1}",
                     "kind": "headline",
                     "title": title,
                     "subtitle": issue.get("source") or "실시간 이슈",
@@ -61,11 +53,11 @@ def build_cards_from_issue(
                 }
             )
         elif tid == "bullets":
-            cards.append({"id": f"c{i+1}", "kind": "bullets", "title": "핵심 브리핑", "bullets": bullets[:4]})
+            cards.append({"id": f"c{i + 1}", "kind": "bullets", "title": "핵심 브리핑", "bullets": bullets[:4]})
         elif tid == "chart":
             cards.append(
                 {
-                    "id": f"c{i+1}",
+                    "id": f"c{i + 1}",
                     "kind": "chart",
                     "title": "한눈에 보기",
                     "left_label": "이전",
@@ -78,7 +70,7 @@ def build_cards_from_issue(
         elif tid == "quote":
             cards.append(
                 {
-                    "id": f"c{i+1}",
+                    "id": f"c{i + 1}",
                     "kind": "quote",
                     "quote": bullets[0][:90],
                     "attribution": issue.get("source") or "Issue Feed",
@@ -87,7 +79,7 @@ def build_cards_from_issue(
         elif tid == "cta":
             cards.append(
                 {
-                    "id": f"c{i+1}",
+                    "id": f"c{i + 1}",
                     "kind": "cta",
                     "title": "정리",
                     "body": "이 이슈의 다음 포인트를 짧게 메모해 두세요.",
@@ -95,12 +87,11 @@ def build_cards_from_issue(
                 }
             )
         else:
-            cards.append({"id": f"c{i+1}", "kind": "headline", "title": title, "subtitle": summary[:80]})
+            cards.append({"id": f"c{i + 1}", "kind": "headline", "title": title, "subtitle": summary[:80]})
     struct = structure or ["hook", "body", "body", "close"]
     for i, c in enumerate(cards):
         c["structure"] = struct[i] if i < len(struct) else "body"
     return cards
-
 
 
 def project_to_html(project: dict[str, Any]) -> str:
@@ -122,7 +113,7 @@ def project_to_html(project: dict[str, Any]) -> str:
     per = float(project.get("seconds_per_card") or 3.0)
     total = max(per * max(len(cards), 1), 6.0)
     motion = project.get("motion") or "zoom"
-    title = project.get("title") or "Leo Card Motion"
+    title = project.get("title") or "Hyperframes Studio"
     anim = {
         "cut": "cut",
         "zoom": "zoom",
@@ -158,11 +149,15 @@ def project_to_html(project: dict[str, Any]) -> str:
             lis = "".join(f"<li>{_esc(b)}</li>" for b in (c.get("bullets") or [])[:5])
             return f"<section {common}><h2>{_esc(c.get('title') or '브리핑')}</h2><ul>{lis}</ul></section>"
         if kind == "chart":
+            left_label = _esc(c.get("left_label"))
+            left_value = _esc(c.get("left_value"))
+            right_label = _esc(c.get("right_label"))
+            right_value = _esc(c.get("right_value"))
             return (
                 f"<section {common}><h2>{_esc(c.get('title') or '비교')}</h2>"
                 f'<div class="chart">'
-                f'<div class="bar"><span>{_esc(c.get("left_label"))}</span><strong>{_esc(c.get("left_value"))}</strong></div>'
-                f'<div class="bar hi"><span>{_esc(c.get("right_label"))}</span><strong>{_esc(c.get("right_value"))}</strong></div>'
+                f'<div class="bar"><span>{left_label}</span><strong>{left_value}</strong></div>'
+                f'<div class="bar hi"><span>{right_label}</span><strong>{right_value}</strong></div>'
                 f'</div><p class="unit">{_esc(c.get("unit") or "")}</p></section>'
             )
         if kind == "quote":
@@ -271,7 +266,7 @@ def project_to_html(project: dict[str, Any]) -> str:
       font-size: {f_body}px;
     }}
     .bar.hi {{ border-color: rgba(241,90,36,.45); box-shadow: 0 0 0 1px rgba(241,90,36,.2); }}
-    .bar strong {{ font-size: {int(f_h2*0.9)}px; color: #f15a24; }}
+    .bar strong {{ font-size: {int(f_h2 * 0.9)}px; color: #f15a24; }}
     .cta {{
       margin-top: 32px;
       display: inline-flex;
@@ -336,14 +331,23 @@ def project_to_html(project: dict[str, Any]) -> str:
     .theme-remotion .kicker {{ color:#ffb08f; }}
     .theme-remotion .kicker::after {{ content:" · REMOTION"; opacity:.8; }}
 
-    @keyframes zoomIn {{ from {{ transform: scale(1.18); filter: blur(2px); }} to {{ transform: scale(1); filter: none; }} }}
-    @keyframes slideIn {{ from {{ transform: translateX(18%); opacity: 0; }} to {{ transform: none; opacity: 1; }} }}
-    @keyframes kinIn {{ from {{ transform: translateY(40px); letter-spacing: .12em; }} to {{ transform: none; letter-spacing: normal; }} }}
+    @keyframes zoomIn {{
+      from {{ transform: scale(1.18); filter: blur(2px); }}
+      to {{ transform: scale(1); filter: none; }}
+    }}
+    @keyframes slideIn {{
+      from {{ transform: translateX(18%); opacity: 0; }}
+      to {{ transform: none; opacity: 1; }}
+    }}
+    @keyframes kinIn {{
+      from {{ transform: translateY(40px); letter-spacing: .12em; }}
+      to {{ transform: none; letter-spacing: normal; }}
+    }}
   </style>
 </head>
 <body>
   <div id="stage" class="theme-{anim}"
-       data-composition-id="leo-card-motion"
+       data-composition-id="hyperframes-studio"
        data-start="0"
        data-duration="{total:.2f}"
        data-fps="30"
@@ -376,7 +380,7 @@ def project_to_html(project: dict[str, Any]) -> str:
 
       // Hyperframes seek API
       window.__timelines = window.__timelines || {{}};
-      window.__timelines['leo-card-motion'] = {{
+      window.__timelines['hyperframes-studio'] = {{
         paused: false,
         t: 0,
         pause() {{ this.paused = true; }},
@@ -398,7 +402,7 @@ def project_to_html(project: dict[str, Any]) -> str:
       let started = performance.now();
       function tick(now) {{
         // If external seek advanced time recently, don't fight it.
-        const tl = window.__timelines['leo-card-motion'];
+        const tl = window.__timelines['hyperframes-studio'];
         if (tl && tl._external) {{
           requestAnimationFrame(tick);
           return;
@@ -411,7 +415,7 @@ def project_to_html(project: dict[str, Any]) -> str:
       requestAnimationFrame(tick);
 
       // Wrap seek to mark external control
-      const tl = window.__timelines['leo-card-motion'];
+      const tl = window.__timelines['hyperframes-studio'];
       const rawSeek = tl.seek.bind(tl);
       tl.seek = function(t) {{
         this._external = true;
@@ -423,11 +427,10 @@ def project_to_html(project: dict[str, Any]) -> str:
 </html>"""
 
 
-
 def save_project(project: dict[str, Any]) -> dict[str, Any]:
     pid = project.get("id") or uuid4().hex[:10]
     project["id"] = pid
-    project["updated_at"] = datetime.now(timezone.utc).isoformat()
+    project["updated_at"] = datetime.now(UTC).isoformat()
     if not project.get("created_at"):
         project["created_at"] = project["updated_at"]
     html = project_to_html(project)

@@ -1,42 +1,54 @@
 from __future__ import annotations
+
+import json
 import os
-import json, subprocess, shutil
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Optional
+import shutil
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from trends import get_trends
-from compose import build_cards_from_issue, save_project, list_projects, get_project, project_to_html
+from api.compose import build_cards_from_issue, get_project, list_projects, project_to_html, save_project
+from api.settings import (
+    DEFAULT_PORT,
+    DISPLAY_NAME,
+    OUTPUT_DIR,
+    PROJECTS_DIR,
+    SERVICE_SLUG,
+    STATIC_DATA_DIR,
+    VERSION,
+    WEB_DIR,
+)
+from api.trends import get_trends
 
-ROOT = Path(__file__).resolve().parents[1]
-WEB = ROOT / "web"
-OUT = ROOT / "output"
-DATA = ROOT / "data"
-OUT.mkdir(exist_ok=True)
+WEB = WEB_DIR
+OUT = OUTPUT_DIR
+DATA = STATIC_DATA_DIR
+
 
 def _has_playwright() -> bool:
     try:
         import playwright  # noqa: F401
+
         return True
     except Exception:
         return False
 
-app = FastAPI(title="Leo Card Motion", version="0.4.0")
+
+app = FastAPI(title=DISPLAY_NAME, version=VERSION)
 
 app.mount("/static", StaticFiles(directory=str(WEB)), name="static")
 app.mount("/output", StaticFiles(directory=str(OUT)), name="output")
 
 
 class BuildIn(BaseModel):
-    issue_id: Optional[str] = None
-    title: Optional[str] = None
-    summary: Optional[str] = None
+    issue_id: str | None = None
+    title: str | None = None
+    summary: str | None = None
     category: str = "rising"
     template_ids: list[str] = Field(default_factory=lambda: ["headline", "bullets", "chart", "quote", "cta"])
     motion: str = "zoom"
@@ -58,19 +70,32 @@ def index():
 
 @app.get("/api/health")
 def health():
+    timeline_configured = bool(
+        (os.environ.get("LT_TIMELINE_URL") or "").strip()
+        and (os.environ.get("LT_TIMELINE_TOKEN") or os.environ.get("LT_SINGLE_USER_TOKEN") or "").strip()
+    )
+    omlx_configured = bool(
+        (os.environ.get("OMLX_BASE_URL") or "").strip() and (os.environ.get("OMLX_MODEL") or "").strip()
+    )
     return {
         "ok": True,
-        "service": "leo-card-motion",
-        "version": "0.4.0",
+        "service": SERVICE_SLUG,
+        "version": VERSION,
         "engine": "hyperframes-compatible-html",
         "ffmpeg": bool(shutil.which("ffmpeg")),
         "playwright": _has_playwright(),
         "npx": bool(shutil.which("npx")),
         "hyperframes": bool(shutil.which("hyperframes")),
-        "default_engine": os.environ.get("LCM_DEFAULT_ENGINE", "hyperframes"),
-
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "omlx_configured": omlx_configured,
+        "timeline_configured": timeline_configured,
+        "default_engine": os.environ.get("HYPERFRAMES_DEFAULT_ENGINE", "hyperframes"),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
+
+
+@app.get("/api/version")
+def version():
+    return {"service": SERVICE_SLUG, "version": VERSION}
 
 
 @app.get("/api/meta")
@@ -100,7 +125,13 @@ def project_get(pid: str):
 @app.post("/api/projects/build")
 def project_build(body: BuildIn):
     # resolve issue from trends cache/list
-    issue = {"title": body.title, "summary": body.summary, "category": body.category, "source": "manual", "id": body.issue_id or "manual"}
+    issue = {
+        "title": body.title,
+        "summary": body.summary,
+        "category": body.category,
+        "source": "manual",
+        "id": body.issue_id or "manual",
+    }
     if body.issue_id or not body.title:
         tr = get_trends(category=body.category)
         found = None
@@ -141,7 +172,7 @@ def preview(pid: str):
     p = get_project(pid)
     if not p:
         raise HTTPException(404, "not found")
-    html_path = ROOT / "compositions" / "projects" / pid / "index.html"
+    html_path = PROJECTS_DIR / pid / "index.html"
     if html_path.exists():
         return html_path.read_text(encoding="utf-8")
     return project_to_html(p)
@@ -155,14 +186,15 @@ def project_render(pid: str, body: RenderIn | None = None):
         raise HTTPException(404, "project not found")
     # ensure composition exists
     save_project(p)
-    preferred = "auto"
     # allow engine override via body.project_id misuse no - use fps only; optional query later
     try:
-        from render_engine import render_project as _render
+        from api.render_engine import render_project as _render
+
         # if motion is remotion special
         pref = (body.engine if getattr(body, "engine", None) else None) or (
-            "remotion" if (p.get("motion") == "remotion" or p.get("engine_hint") == "remotion-adapter")
-            else (p.get("engine_hint") if p.get("engine_hint") in {"hyperframes","playwright","remotion"} else "auto")
+            "remotion"
+            if (p.get("motion") == "remotion" or p.get("engine_hint") == "remotion-adapter")
+            else (p.get("engine_hint") if p.get("engine_hint") in {"hyperframes", "playwright", "remotion"} else "auto")
         )
         result = _render(pid, preferred=pref, fps=int(getattr(body, "fps", None) or 30))
     except Exception as e:
@@ -170,7 +202,7 @@ def project_render(pid: str, body: RenderIn | None = None):
     p["status"] = "rendered"
     p["render"] = {
         **result,
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
         "preview_url": p.get("preview_url") or f"/output/{pid}.html",
     }
     save_project(p)
@@ -233,7 +265,8 @@ def set_engine(pid: str, body: EngineIn):
     p["engine_hint"] = "remotion-adapter" if eng == "remotion" else eng
     if eng == "remotion":
         p["motion"] = "kinetic"
-        from remotion_adapter import export_remotion_project
+        from api.remotion_adapter import export_remotion_project
+
         export_remotion_project(pid)
     p = save_project(p)
     return {"ok": True, "project": p}
@@ -243,26 +276,29 @@ def set_engine(pid: str, body: EngineIn):
 def push_timeline(pid: str):
     """Register composition into Leo Timeline as storyboard draft."""
     import httpx
+
     proj = get_project(pid)
     if not proj:
         raise HTTPException(404, "project not found")
-    base = (os.environ.get("LT_TIMELINE_URL") or "http://leo-timeline-web:8000").rstrip("/")
+    base = (os.environ.get("LT_TIMELINE_URL") or "").strip().rstrip("/")
     token = (os.environ.get("LT_TIMELINE_TOKEN") or os.environ.get("LT_SINGLE_USER_TOKEN") or "").strip()
+    if not base:
+        raise HTTPException(503, detail="LT_TIMELINE_URL not set")
     if not token:
         raise HTTPException(503, detail="LT_TIMELINE_TOKEN not set")
     payload = {
         "kind": "storyboard",
-        "name": f"CardMotion · {(proj.get('title') or pid)[:80]}",
+        "name": f"Hyperframes Studio · {(proj.get('title') or pid)[:80]}",
         "status": "draft",
         "summary": (proj.get("issue") or {}).get("summary") or proj.get("title") or "",
-        "tags": ["leo-card-motion", "hyperframes", "storyboard"],
+        "tags": [SERVICE_SLUG, "hyperframes", "storyboard"],
         "data": {
-            "source": "leo-card-motion",
+            "source": SERVICE_SLUG,
             "project_id": pid,
             "preview_url": proj.get("preview_url"),
-            "cards_app_url": f"/cards/?project={pid}",
-            "cards_preview_url": f"/cards{proj.get('preview_url') or f'/output/{pid}.html'}",
-            "cards_video_url": (f"/cards{(proj.get('render') or {}).get('video_url')}" if (proj.get('render') or {}).get('video_url') else None),
+            "cards_app_url": f"/?project={pid}",
+            "cards_preview_url": proj.get("preview_url") or f"/output/{pid}.html",
+            "cards_video_url": (proj.get("render") or {}).get("video_url"),
             "video_url": (proj.get("render") or {}).get("video_url"),
             "cards": proj.get("cards") or [],
             "aspect_ratio": proj.get("aspect_ratio"),
@@ -286,10 +322,7 @@ def favicon():
     return HTMLResponse(status_code=204)
 
 
-# ensure imports path
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8770, reload=False)
+
+    uvicorn.run("api.main:app", host="0.0.0.0", port=DEFAULT_PORT, reload=False)

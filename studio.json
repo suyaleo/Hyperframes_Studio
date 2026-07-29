@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "displayName": "Hyperframes Studio",
+  "repository": "Hyperframes_Studio",
+  "slug": "hyperframes-studio",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "container": "ghcr.io/suyaleo/hyperframes-studio",
+  "defaultPort": 8770,
+  "healthEndpoint": "/api/health",
+  "dataDirectory": "/data",
+  "aiProfile": "hyperframes-studio"
+}
