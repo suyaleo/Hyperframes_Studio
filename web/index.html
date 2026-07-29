@@ -3,95 +3,162 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Leo Card Motion</title>
-  <link rel="stylesheet" href="/cards/static/styles.css?v=0.5.0"/>
+  <meta name="theme-color" content="#0b0d10"/>
+  <title>Leo Card Studio</title>
+  <link rel="stylesheet" href="static/styles.css?v=0.6.0"/>
 </head>
 <body>
-  <div class="app">
-    <aside class="rail" aria-label="navigation">
-      <div class="brand">LC</div>
-      <a class="nav active" href="/cards/"><span>▣</span>스튜디오</a>
-      <a class="nav" href="/app/"><span>▶</span>Timeline</a>
-      <a class="nav" href="/grok/"><span>◎</span>Grok</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="주요 메뉴">
+      <a class="wordmark" href="./" aria-label="Leo Card Studio 홈">
+        <span class="mark">L</span><span>Leo Card<br/><b>Studio</b></span>
+      </a>
+      <nav class="main-nav">
+        <a class="nav-link active" href="./"><span class="nav-icon">▦</span><span>스튜디오</span></a>
+        <a class="nav-link" href="/app/"><span class="nav-icon">▷</span><span>Timeline</span></a>
+        <a class="nav-link" href="/grok/"><span class="nav-icon">⌁</span><span>Grok</span></a>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="health-dot" id="healthDot"></span>
+        <span id="health">서버 확인 중</span>
+      </div>
     </aside>
 
-    <div class="main">
-      <header class="top">
-        <div class="titleblock">
-          <h1>Leo Card Motion</h1>
-          <p>급상승 이슈 → 카드 슬라이드 → 영상</p>
+    <main class="product">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="btnMenu" type="button" aria-label="메뉴 열기">☰</button>
+        <div class="project-heading">
+          <span class="eyebrow">현재 프로젝트</span>
+          <div class="project-title-row">
+            <h1 id="projectTitle">새 카드 영상</h1>
+            <span class="save-state" id="saveState">시작 전</span>
+          </div>
         </div>
-        <div class="top-actions" id="health">booting…</div>
+        <div class="topbar-actions">
+          <button class="text-btn" id="btnRecent" type="button">최근 작업</button>
+          <button class="btn btn-strong" id="btnRender" type="button" disabled>
+            <span class="btn-label">렌더 시작</span><span aria-hidden="true">→</span>
+          </button>
+        </div>
       </header>
 
-      <div class="workspace">
-        <section class="col primary">
-          <div class="panel">
-            <div class="panel-head">
-              <span class="kicker">Preview</span>
-              <div class="controls">
-                <select id="aspect">
-                  <option value="9:16">9:16</option>
-                  <option value="16:9">16:9</option>
-                  <option value="1:1">1:1</option>
-                </select>
-                <select id="engine">
-                  <option value="hyperframes" selected>Hyperframes</option>
-                  <option value="auto">auto</option>
-                  <option value="playwright">Playwright</option>
-                  <option value="remotion">Remotion</option>
-                </select>
-                <button class="btn" id="btnRefresh" type="button">이슈 새로고침</button>
-                <button class="btn primary" id="btnBuild" type="button">카드 생성</button>
-                <button class="btn primary" id="btnRender" type="button">렌더</button>
-                <button class="btn" id="btnPush" type="button">Timeline 전송</button>
-              </div>
-            </div>
-            <div class="stage-frame">
-              <div class="stage" id="stage"><div class="empty">카드를 생성하면 여기에 미리보기가 뜹니다</div></div>
-            </div>
-            <div class="status" id="projStatus">프로젝트 없음</div>
-          </div>
+      <section class="workflow" aria-label="제작 단계">
+        <div class="workflow-track">
+          <span class="workflow-step active" data-step="issue"><i>1</i>이슈</span>
+          <span class="workflow-step" data-step="compose"><i>2</i>구성</span>
+          <span class="workflow-step" data-step="edit"><i>3</i>편집</span>
+          <span class="workflow-step" data-step="render"><i>4</i>렌더</span>
+        </div>
+        <p id="workflowHint">왼쪽에서 이슈를 고른 뒤 카드 구성을 시작하세요.</p>
+      </section>
 
-          <div class="panel">
-            <div class="kicker">트렌드 이슈</div>
-            <div class="chips" id="catChips"></div>
-            <div class="issue-list" id="issueList"></div>
-            <div class="status" id="trendStatus"></div>
-            <div class="ticker" id="ticker"></div>
+      <div class="studio-grid">
+        <section class="source-pane" aria-labelledby="sourceTitle">
+          <div class="pane-head">
+            <div><span class="eyebrow">01 · Source</span><h2 id="sourceTitle">이슈 선택</h2></div>
+            <button class="icon-btn" id="btnRefresh" type="button" title="이슈 새로고침" aria-label="이슈 새로고침">↻</button>
           </div>
-
-          <div class="panel">
-            <div class="kicker">생성 옵션</div>
-            <div class="options-grid">
-              <div>
-                <div class="label">카드 템플릿</div>
-                <div class="chips" id="tplChips"></div>
-              </div>
-              <div>
-                <div class="label">모션 (전환 스타일 · 미리보기/렌더 모두 적용)</div>
-                <div class="chips" id="motionChips"></div>
-              </div>
-            </div>
+          <div class="chips category-chips" id="catChips" aria-label="이슈 카테고리"></div>
+          <div class="issue-list" id="issueList" aria-live="polite"></div>
+          <div class="source-footer">
+            <div class="feed-status"><span class="live-dot"></span><span id="trendStatus">피드 준비 중</span></div>
+            <button class="btn btn-outline full" id="btnBuild" type="button" disabled>선택한 이슈로 카드 만들기</button>
           </div>
         </section>
 
-        <section class="col side">
-          <div class="panel sticky">
-            <div class="kicker">슬라이드 보드</div>
-            <div class="slides" id="slides"></div>
+        <section class="canvas-pane" aria-labelledby="previewTitle">
+          <div class="canvas-head">
+            <div><span class="eyebrow">02 · Preview</span><h2 id="previewTitle">카드 미리보기</h2></div>
+            <div class="canvas-meta"><span id="previewKind">—</span><span id="previewAspect">9:16</span></div>
           </div>
-          <div class="panel" id="editor">
-            <div class="status">슬라이드를 선택하면 편집할 수 있습니다</div>
+          <div class="stage-wrap">
+            <div class="stage phone-mode" id="stage">
+              <div class="empty-state">
+                <span class="empty-mark">L</span>
+                <strong>아직 카드가 없습니다</strong>
+                <p>이슈를 선택하면 5장의 초안을 만들고<br/>바로 편집할 수 있습니다.</p>
+              </div>
+            </div>
           </div>
+          <div class="playbar" aria-label="미리보기 재생 제어">
+            <button class="icon-btn" id="btnPrev" type="button" aria-label="이전 카드">←</button>
+            <button class="play-btn" id="btnPlay" type="button" aria-label="미리보기 재생">▶</button>
+            <button class="icon-btn" id="btnNext" type="button" aria-label="다음 카드">→</button>
+            <div class="play-progress"><i id="playProgress"></i></div>
+            <span id="playPosition">0 / 0</span>
+          </div>
+          <div class="sequence-head">
+            <div><span class="eyebrow">03 · Sequence</span><h2>카드 순서</h2></div>
+            <span class="subtle" id="cardCount">0장</span>
+          </div>
+          <div class="slides" id="slides" aria-label="카드 순서"></div>
+          <section class="render-panel" id="renderPanel" hidden aria-live="polite">
+            <div class="render-copy">
+              <span class="render-spinner" id="renderSpinner"></span>
+              <div><strong id="renderTitle">영상 렌더링 중</strong><p id="renderMessage">카드 프레임을 영상으로 만들고 있습니다.</p></div>
+            </div>
+            <div class="render-time" id="renderTime">00:00</div>
+            <div class="render-track"><i id="renderBar"></i></div>
+          </section>
+          <section class="output-panel" id="outputPanel" hidden>
+            <div><span class="eyebrow">Output ready</span><strong id="outputTitle">영상이 준비되었습니다</strong></div>
+            <div class="output-actions">
+              <a class="btn btn-strong" id="btnDownload" href="#" download>다운로드</a>
+              <a class="btn btn-outline" id="btnOpen" href="#" target="_blank" rel="noopener">새 창에서 열기</a>
+              <button class="btn btn-outline" id="btnCopy" type="button">링크 복사</button>
+              <button class="btn btn-quiet" id="btnPush" type="button">Timeline 전송</button>
+            </div>
+          </section>
         </section>
+
+        <aside class="inspector-pane" aria-labelledby="inspectorTitle">
+          <div class="pane-head inspector-heading">
+            <div><span class="eyebrow">04 · Inspector</span><h2 id="inspectorTitle">생성 설정</h2></div>
+          </div>
+          <section class="inspector-section">
+            <div class="section-label"><span>화면 비율</span><small>출력 크기</small></div>
+            <div class="segmented" id="aspectOptions">
+              <button class="active" type="button" data-aspect="9:16">9:16</button>
+              <button type="button" data-aspect="16:9">16:9</button>
+              <button type="button" data-aspect="1:1">1:1</button>
+            </div>
+          </section>
+          <section class="inspector-section">
+            <div class="section-label"><span>모션 프리셋</span><small>미리보기와 출력에 적용</small></div>
+            <div class="motion-list" id="motionChips"></div>
+          </section>
+          <section class="inspector-section">
+            <div class="section-label"><span>카드 구성</span><small>새 카드 생성 시 적용</small></div>
+            <div class="template-list" id="tplChips"></div>
+          </section>
+          <section class="editor" id="editor">
+            <div class="editor-empty">
+              <span>편집할 카드 선택</span>
+              <p>카드가 만들어지면 선택한 슬라이드의 제목과 본문을 여기서 바로 수정합니다.</p>
+            </div>
+          </section>
+          <details class="advanced">
+            <summary>고급 렌더 설정</summary>
+            <label for="engine">렌더 엔진</label>
+            <select id="engine">
+              <option value="hyperframes" selected>Hyperframes</option>
+              <option value="auto">자동 선택</option>
+              <option value="playwright">Playwright</option>
+              <option value="remotion">Remotion</option>
+            </select>
+          </details>
+        </aside>
       </div>
-    </div>
+    </main>
   </div>
-  <div id="toast" class="toast" hidden></div>
-  <script>
-    window.APP_BASE = "/cards";
-  </script>
-  <script src="/cards/static/app.js?v=0.5.0"></script>
+
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="recent-drawer" id="recentDrawer" aria-label="최근 작업" aria-hidden="true">
+    <div class="drawer-head"><div><span class="eyebrow">Projects</span><h2>최근 작업</h2></div><button class="icon-btn" id="btnCloseRecent" type="button" aria-label="닫기">×</button></div>
+    <div class="recent-list" id="recentList"></div>
+  </aside>
+  <div id="toast" class="toast" hidden role="status"></div>
+  <script>window.APP_BASE = location.pathname.startsWith("/cards") ? "/cards" : "";</script>
+  <script src="static/app.js?v=0.6.0"></script>
 </body>
 </html>
