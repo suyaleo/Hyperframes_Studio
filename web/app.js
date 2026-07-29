@@ -214,7 +214,9 @@ async function saveCard() {
     renderSlides();
     renderEditor();
     setPreview(state.project.preview_url);
-    toast("카드 저장됨");
+    const st = $("#stage");
+    if (st) st.scrollIntoView({behavior:"smooth", block:"center"});
+    toast("카드 저장됨 · 미리보기 갱신");
   } catch (e) {
     toast(e.message, true);
   }
@@ -316,8 +318,10 @@ async function buildProject() {
     renderSlides();
     renderEditor();
     setPreview(data.project.preview_url || `/preview/${data.project.id}`);
-    $("#projStatus").textContent = `프로젝트 ${data.project.id} · 카드 ${data.project.cards.length}`;
-    toast("카드 슬라이드 생성 완료");
+    $("#projStatus").textContent = `프로젝트 ${data.project.id} · 카드 ${data.project.cards.length} · 미리보기 표시 중`;
+    const st = $("#stage");
+    if (st) st.scrollIntoView({behavior:"smooth", block:"center"});
+    toast("카드 " + data.project.cards.length + "장 생성 · 미리보기 확인");
   } catch (e) {
     toast(e.message, true);
   } finally {
