@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from html import unescape
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,23 +31,49 @@ def _esc(s: Any) -> str:
     )
 
 
+def _clean_text(value: Any, limit: int | None = None) -> str:
+    text = unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbs(?:p)?;?", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+    if limit and len(text) > limit:
+        text = text[: max(1, limit - 1)].rstrip(" ,·-") + "…"
+    return text
+
+
+def issue_title_and_source(issue: dict[str, Any]) -> tuple[str, str]:
+    raw_title = _clean_text(issue.get("title")) or "이슈 브리핑"
+    feed_source = _clean_text(issue.get("source"))
+    title, publisher = raw_title, feed_source
+    if " - " in raw_title:
+        candidate_title, candidate_source = raw_title.rsplit(" - ", 1)
+        if 1 < len(candidate_source) <= 40:
+            title, publisher = candidate_title.strip(), candidate_source.strip()
+    generic_sources = {"google 뉴스", "google news", "rising", "economy", "it", "politics", "life", "manual"}
+    if publisher.lower() in generic_sources:
+        publisher = "Issue Feed"
+    return _clean_text(title, 86), _clean_text(publisher, 42) or "Issue Feed"
+
+
 def build_cards_from_issue(
     issue: dict[str, Any],
     template_ids: list[str] | None = None,
     structure: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    title = issue.get("title") or "이슈 브리핑"
-    summary = issue.get("summary") or "핵심 내용을 짧게 정리합니다."
-    # strip residual html entities noise
-    summary = re.sub(r"&nbsp;?", " ", summary)
-    summary = re.sub(r"\s+", " ", summary).strip()
-    bullets = [b.strip() for b in re.split(r"[.!?。]\s+", summary) if b.strip()][:4]
+    title, publisher = issue_title_and_source(issue)
+    summary = _clean_text(issue.get("summary")) or title
+    sentences = [_clean_text(part, 74) for part in re.split(r"(?<=[.!?。])\s+|[•·]\s*", summary) if _clean_text(part)]
+    bullets = sentences[:4]
+    if len(bullets) < 2 and summary != title:
+        bullets.insert(0, _clean_text(title, 74))
     if len(bullets) < 2:
-        bullets = [
-            summary[:80],
-            "관련 동향을 계속 추적해야 합니다.",
-            "단기 이슈와 구조 변화를 구분해 보세요.",
-        ]
+        bullets.append(f"{publisher}에서 전한 주요 이슈입니다.")
+    category_labels = {
+        "rising": "실시간 이슈", "economy": "경제", "it": "테크",
+        "politics": "정치", "life": "라이프",
+    }
+    category = category_labels.get(str(issue.get("category") or "").lower(), _clean_text(issue.get("category")) or "이슈")
+    published = _clean_text(issue.get("published"), 44)
     templates = template_ids or ["headline", "bullets", "quote", "cta"]
     cards: list[dict[str, Any]] = []
     for i, tid in enumerate(templates):
@@ -56,8 +83,8 @@ def build_cards_from_issue(
                     "id": f"c{i+1}",
                     "kind": "headline",
                     "title": title,
-                    "subtitle": issue.get("source") or "실시간 이슈",
-                    "kicker": "급상승" if issue.get("category") == "rising" else (issue.get("category") or "ISSUE"),
+                    "subtitle": publisher,
+                    "kicker": category,
                 }
             )
         elif tid == "bullets":
@@ -67,12 +94,12 @@ def build_cards_from_issue(
                 {
                     "id": f"c{i+1}",
                     "kind": "chart",
-                    "title": "한눈에 보기",
-                    "left_label": "이전",
-                    "right_label": "현재",
-                    "left_value": "62",
-                    "right_value": "88",
-                    "unit": "관심도",
+                    "title": "이 이슈의 기준 정보",
+                    "left_label": "분류",
+                    "right_label": "출처",
+                    "left_value": category,
+                    "right_value": publisher,
+                    "unit": published or "피드에 공개된 정보를 기준으로 구성했습니다.",
                 }
             )
         elif tid == "quote":
@@ -80,8 +107,8 @@ def build_cards_from_issue(
                 {
                     "id": f"c{i+1}",
                     "kind": "quote",
-                    "quote": bullets[0][:90],
-                    "attribution": issue.get("source") or "Issue Feed",
+                    "quote": _clean_text(bullets[0], 110),
+                    "attribution": f"출처 요약 · {publisher}",
                 }
             )
         elif tid == "cta":
@@ -89,9 +116,9 @@ def build_cards_from_issue(
                 {
                     "id": f"c{i+1}",
                     "kind": "cta",
-                    "title": "정리",
-                    "body": "이 이슈의 다음 포인트를 짧게 메모해 두세요.",
-                    "button": "전체 브리핑 보기",
+                    "title": "맥락까지 확인하세요",
+                    "body": "제목만으로 판단하기 전에 원문에서 배경과 최신 내용을 확인하세요.",
+                    "button": "원문 확인",
                 }
             )
         else:
@@ -144,7 +171,7 @@ def project_to_html(project: dict[str, Any]) -> str:
         common = (
             f'class="clip card card-{kind} m-{anim}{active}" '
             f'data-start="{start_t:.2f}" data-duration="{per:.2f}" data-track-index="1" '
-            f'data-card-id="{_esc(c.get("id", ""))}"'
+            f'data-card-id="{_esc(c.get("id", ""))}" data-index="{idx + 1:02d}"'
         )
         if kind == "headline":
             return (
@@ -167,8 +194,8 @@ def project_to_html(project: dict[str, Any]) -> str:
             )
         if kind == "quote":
             return (
-                f"<section {common}><blockquote>“{_esc(c.get('quote'))}”</blockquote>"
-                f"<cite>— {_esc(c.get('attribution'))}</cite></section>"
+                f"<section {common}><blockquote>{_esc(c.get('quote'))}</blockquote>"
+                f"<cite>{_esc(c.get('attribution'))}</cite></section>"
             )
         return (
             f"<section {common}><h2>{_esc(c.get('title'))}</h2><p>{_esc(c.get('body'))}</p>"
@@ -187,7 +214,7 @@ def project_to_html(project: dict[str, Any]) -> str:
       margin: 0; padding: 0;
       width: {w}px; height: {h}px;
       overflow: hidden;
-      background: #0a0a0b;
+      background: #090b0e;
       color: #f4f1ea;
       font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
     }}
@@ -197,8 +224,10 @@ def project_to_html(project: dict[str, Any]) -> str:
       height: {h}px;
       overflow: hidden;
       background:
-        radial-gradient(900px 520px at 80% 0%, rgba(241,90,36,.20), transparent 55%),
-        #0a0a0b;
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        #090b0e;
+      background-size: 64px 64px;
       /* NEVER scale in render composition */
       transform: none !important;
     }}
@@ -213,6 +242,18 @@ def project_to_html(project: dict[str, Any]) -> str:
       visibility: hidden;
       pointer-events: none;
     }}
+    .card::before {{
+      content: attr(data-index);
+      position: absolute; top: {pad}px; right: {pad}px;
+      color: #ff6846; font-size: {f_kicker}px; font-weight: 800;
+      letter-spacing: .08em;
+    }}
+    .card::after {{
+      content: "LEO / CARD STUDIO";
+      position: absolute; left: {pad}px; bottom: {int(pad * .62)}px;
+      color: #68717c; font-size: {int(f_kicker * .58)}px;
+      letter-spacing: .20em;
+    }}
     .card.is-on {{
       opacity: 1;
       visibility: visible;
@@ -222,7 +263,7 @@ def project_to_html(project: dict[str, Any]) -> str:
       display: inline-block;
       font-size: {f_kicker}px;
       letter-spacing: .14em;
-      color: #f15a24;
+      color: #ff6846;
       font-weight: 700;
       margin-bottom: 28px;
       text-transform: uppercase;
@@ -232,7 +273,7 @@ def project_to_html(project: dict[str, Any]) -> str:
       line-height: 1.18;
       letter-spacing: -.03em;
       margin: 0 0 22px;
-      font-weight: 780;
+      font-weight: 800;
       word-break: keep-all;
       max-width: 100%;
     }}
@@ -244,14 +285,15 @@ def project_to_html(project: dict[str, Any]) -> str:
       word-break: keep-all;
     }}
     .sub, p, li, cite {{
-      color: #b8b3a8;
+      color: #a7afb8;
       font-size: {f_body}px;
       line-height: 1.45;
       word-break: keep-all;
       margin: 0;
     }}
-    ul {{ margin: 0; padding-left: 1.15em; }}
-    li {{ margin: 0 0 18px; }}
+    ul {{ margin: 0; padding: 0; list-style: none; }}
+    li {{ margin: 0 0 22px; padding-left: 34px; position: relative; }}
+    li::before {{ content:""; position:absolute; left:0; top:.72em; width:14px; height:4px; background:#ff6846; }}
     blockquote {{
       font-size: {f_quote}px;
       line-height: 1.28;
@@ -260,78 +302,72 @@ def project_to_html(project: dict[str, Any]) -> str:
       font-weight: 650;
       word-break: keep-all;
     }}
-    cite {{ display: block; margin-top: 28px; }}
-    .chart {{ display: grid; gap: 18px; margin-top: 8px; }}
+    cite {{ display: block; margin-top: 34px; color:#ff6846; font-style:normal; }}
+    .chart {{ display: grid; gap: 1px; margin-top: 12px; background:rgba(244,241,234,.12); }}
     .bar {{
       display: flex; justify-content: space-between; align-items: center;
-      padding: 22px 26px;
-      border: 1px solid rgba(244,241,234,.12);
-      border-radius: 22px;
-      background: #121214;
+      padding: 28px 30px;
+      background: #11151a;
       font-size: {f_body}px;
     }}
-    .bar.hi {{ border-color: rgba(241,90,36,.45); box-shadow: 0 0 0 1px rgba(241,90,36,.2); }}
-    .bar strong {{ font-size: {int(f_h2*0.9)}px; color: #f15a24; }}
+    .bar.hi {{ background:#14191f; }}
+    .bar strong {{ max-width:62%; text-align:right; font-size: {int(f_body*1.08)}px; color: #f4f1ea; word-break:keep-all; }}
+    .unit {{ margin-top:22px; font-size:{int(f_body*.72)}px; }}
     .cta {{
       margin-top: 32px;
       display: inline-flex;
       padding: 18px 28px;
-      border-radius: 999px;
-      background: linear-gradient(180deg,#ff7a45,#f15a24);
-      color: #fff;
+      border: 2px solid #ff6846;
+      color: #ff6846;
       font-weight: 700;
       font-size: {f_body}px;
     }}
-    .progress {{ position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(255,255,255,.08); }}
-    .progress > i {{ display: block; height: 100%; width: 0; background: #f15a24; }}
+    .progress {{ position: absolute; left: {pad}px; right: {pad}px; bottom: {int(pad*.35)}px; height: 4px; background: rgba(255,255,255,.08); }}
+    .progress > i {{ display: block; height: 100%; width: 0; background: #ff6846; }}
     /* ===== MOTION PRESETS (must look different) ===== */
     .m-cut.is-on {{ animation: none; }}
-    .m-cut .kicker {{ background:#f15a24; color:#111; padding:8px 14px; border-radius:8px; }}
-    .theme-cut #stage {{ background:#0a0a0b; }}
+    .m-cut .kicker {{ border-left:10px solid #ff6846; padding-left:18px; }}
+    #stage.theme-cut {{ background:#090b0e; }}
 
     .m-zoom.is-on {{ animation: zoomIn .55s cubic-bezier(.2,.8,.2,1) both; }}
-    .theme-zoom #stage {{
+    #stage.theme-zoom {{
       background:
-        radial-gradient(1200px 700px at 50% 40%, rgba(241,90,36,.35), transparent 50%),
-        #070708;
+        radial-gradient(1200px 700px at 72% 26%, rgba(255,104,70,.14), transparent 50%),
+        #090b0e;
     }}
     .m-zoom h1 {{ transform-origin: center; }}
 
     .m-kinetic.is-on {{ animation: kinIn .5s ease both; }}
-    .theme-kinetic #stage {{
+    #stage.theme-kinetic {{
       background:
-        linear-gradient(135deg, rgba(241,90,36,.25), transparent 40%),
-        repeating-linear-gradient(-12deg, rgba(255,255,255,.03) 0 12px, transparent 12px 24px),
-        #0a0a0b;
+        linear-gradient(145deg, rgba(255,104,70,.12), transparent 42%), #090b0e;
     }}
     .theme-kinetic .kicker {{
-      border-left: 8px solid #f15a24; padding-left: 16px; letter-spacing: .28em;
+      border-left: 8px solid #ff6846; padding-left: 16px; letter-spacing: .24em;
     }}
     .theme-kinetic h1 {{
       text-transform: uppercase;
       letter-spacing: -.04em;
-      text-shadow: 0 0 40px rgba(241,90,36,.35);
+      text-shadow: 0 0 40px rgba(255,104,70,.20);
     }}
     .theme-kinetic h1::after {{
       content:""; display:block; width:42%; height:10px; margin-top:22px;
-      background: linear-gradient(90deg,#f15a24,#ffb08f); border-radius:999px;
+      background: #ff6846;
     }}
 
     .m-slide.is-on {{ animation: slideIn .55s cubic-bezier(.2,.8,.2,1) both; }}
-    .theme-slide #stage {{
+    #stage.theme-slide {{
       background:
-        linear-gradient(90deg, rgba(241,90,36,.22), transparent 45%),
-        #0a0a0b;
+        linear-gradient(90deg, rgba(255,104,70,.12), transparent 45%), #090b0e;
     }}
     .theme-slide .card {{
-      border-left: 14px solid #f15a24;
+      border-left: 14px solid #ff6846;
       padding-left: calc({pad}px + 10px);
     }}
 
-    .theme-remotion #stage {{
+    #stage.theme-remotion {{
       background:
-        radial-gradient(900px 500px at 85% 0%, rgba(241,90,36,.30), transparent 55%),
-        linear-gradient(160deg,#120b08 0%,#0a0a0b 45%,#0c1018 100%);
+        radial-gradient(900px 500px at 80% 8%, rgba(255,104,70,.16), transparent 55%), #090b0e;
     }}
     .theme-remotion .kicker {{ color:#ffb08f; }}
     .theme-remotion .kicker::after {{ content:" · REMOTION"; opacity:.8; }}
