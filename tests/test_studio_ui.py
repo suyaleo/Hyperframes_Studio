@@ -54,8 +54,12 @@ def test_research_first_controls_are_present() -> None:
     assert actions_start < html.index('aria-label="Composition 작업"')
     assert 'id="variantGrid"' in html
     assert 'id="renderVariantList"' in html
-    assert '/static/styles.css?v=0.3.0' in html
-    assert '/static/app.js?v=0.5.0' in html
+    assert '/static/styles.css?v=0.4.0' in html
+    assert '/static/app.js?v=0.6.0' in html
+    assert 'id="btnDownloadVideo"' in html
+    assert 'id="btnDownloadHtml"' in html
+    assert 'id="btnDownloadPackage"' in html
+    assert "Timeline으로 보내기" not in html
     assert "표준 · 10–14장" in html
     assert "근거 수집부터 카드 생성까지 자동으로 진행합니다" in html
 
@@ -73,3 +77,11 @@ def test_aspect_players_fit_inside_the_canvas_without_cropping() -> None:
     assert ".studio-canvas__frame.aspect-16-9 { width: auto; height: 100%;" in css
     assert "max-width: 100%; max-height: 100%;" in css
     assert "object-fit: contain" in css
+
+
+def test_video_preview_is_keyed_to_preserve_playback() -> None:
+    javascript = (ROOT / "web/app.js").read_text(encoding="utf-8")
+
+    assert "stage.dataset.previewKey !== previewKey" in javascript
+    assert "variant.rendered_at" in javascript
+    assert 'preload="auto"' in javascript

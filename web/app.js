@@ -50,6 +50,12 @@ function withBase(path) {
   return APP_BASE + (path.startsWith("/") ? path : `/${path}`);
 }
 
+function versionedArtifactUrl(path, version) {
+  const url = withBase(path);
+  if (!url || !version) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}artifact=${encodeURIComponent(version)}`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -118,6 +124,7 @@ function renderVariants() {
   const badge = $("#aspectStatus");
   badge.dataset.state = active?.render_status || "pending";
   badge.textContent = variantStateLabel(active?.render_status);
+  updateExportActions();
 }
 
 async function chooseAspect(aspect) {
@@ -378,22 +385,110 @@ function paintPreview() {
   const cards = state.project?.cards || [];
   const stage = $("#stage");
   if (!cards.length) {
-    stage.innerHTML = `<div class="empty-state"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 14 2.5-2.5L14 15l2-2 3 3M8 8h.01"/></svg><strong>이슈를 선택해 카드를 생성하세요</strong><span>생성된 HTML 카드와 영상이 이 캔버스에서 재생됩니다.</span></div>`;
+    const previewKey = "empty";
+    if (stage.dataset.previewKey !== previewKey) {
+      stage.innerHTML = `<div class="empty-state"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 14 2.5-2.5L14 15l2-2 3 3M8 8h.01"/></svg><strong>이슈를 선택해 카드를 생성하세요</strong><span>생성된 HTML 카드와 영상이 이 캔버스에서 재생됩니다.</span></div>`;
+      stage.dataset.previewKey = previewKey;
+    }
     updateTransport();
     return;
   }
   state.previewIndex = ((state.previewIndex % cards.length) + cards.length) % cards.length;
   const variant = activeVariant();
   if (state.showRenderedVideo && variant?.video_url) {
-    stage.innerHTML = `<video src="${withBase(variant.video_url)}" controls playsinline aria-label="${escapeHtml(state.aspect)} 렌더 영상"></video>`;
+    const previewKey = ["video", state.project.id, state.aspect, variant.video_url, variant.rendered_at || "ready"].join(":");
+    if (stage.dataset.previewKey !== previewKey) {
+      stage.querySelector("video")?.pause();
+      const source = versionedArtifactUrl(variant.video_url, variant.rendered_at);
+      stage.innerHTML = `<video src="${escapeHtml(source)}" controls playsinline preload="auto" aria-label="${escapeHtml(state.aspect)} 렌더 영상"></video><span class="video-load-status" hidden>영상 버퍼링 중…</span>`;
+      stage.dataset.previewKey = previewKey;
+      const video = stage.querySelector("video");
+      const status = stage.querySelector(".video-load-status");
+      const setLoading = (loading) => { status.hidden = !loading; };
+      video.addEventListener("waiting", () => setLoading(true));
+      video.addEventListener("stalled", () => setLoading(true));
+      video.addEventListener("canplay", () => setLoading(false));
+      video.addEventListener("playing", () => setLoading(false));
+      video.addEventListener("error", () => {
+        status.textContent = "영상을 불러오지 못했습니다. 화면비를 다시 선택하세요.";
+        setLoading(true);
+      });
+    }
   } else if (variant?.preview_url) {
-    const params = `preview=1&card=${state.previewIndex}`;
-    stage.innerHTML = `<iframe src="${withBase(variant.preview_url)}?${params}" title="${escapeHtml(state.aspect)} Composition 미리보기"></iframe>`;
+    const params = `preview=1&card=${state.previewIndex}&artifact=${encodeURIComponent(state.project.updated_at || "draft")}`;
+    const previewKey = ["html", state.project.id, state.aspect, state.previewIndex, variant.preview_url, state.project.updated_at || "draft"].join(":");
+    if (stage.dataset.previewKey !== previewKey) {
+      stage.querySelector("video")?.pause();
+      stage.innerHTML = `<iframe src="${withBase(variant.preview_url)}?${params}" title="${escapeHtml(state.aspect)} Composition 미리보기"></iframe>`;
+      stage.dataset.previewKey = previewKey;
+    }
   } else {
     const card = cards[state.previewIndex];
-    stage.innerHTML = `<div class="pv-shell motion-${escapeHtml(state.project.motion || state.motion)}"><div class="pv-meta">${String(state.previewIndex + 1).padStart(2, "0")}/${String(cards.length).padStart(2, "0")} · ${escapeHtml(card.kind)}</div>${cardPreviewHtml(card)}<div class="pv-progress"><i style="width:${((state.previewIndex + 1) / cards.length) * 100}%"></i></div></div>`;
+    const previewKey = ["fallback", state.project.id, state.aspect, state.previewIndex, state.project.updated_at || "draft"].join(":");
+    if (stage.dataset.previewKey !== previewKey) {
+      stage.querySelector("video")?.pause();
+      stage.innerHTML = `<div class="pv-shell motion-${escapeHtml(state.project.motion || state.motion)}"><div class="pv-meta">${String(state.previewIndex + 1).padStart(2, "0")}/${String(cards.length).padStart(2, "0")} · ${escapeHtml(card.kind)}</div>${cardPreviewHtml(card)}<div class="pv-progress"><i style="width:${((state.previewIndex + 1) / cards.length) * 100}%"></i></div></div>`;
+      stage.dataset.previewKey = previewKey;
+    }
   }
   updateTransport();
+}
+
+function artifactFilename(extension) {
+  const key = activeVariant()?.key || state.aspect.replace(":", "x");
+  return `hyperframes-${state.project?.id || "project"}-${key}.${extension}`;
+}
+
+function triggerDownload(url, filename) {
+  if (!url) return;
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function updateExportActions() {
+  const htmlButton = $("#btnDownloadHtml");
+  if (!htmlButton) return;
+  const variant = activeVariant();
+  const ready = Object.values(state.project?.variants || {}).filter((item) => item.render_status === "ready").length;
+  const hasProject = Boolean(state.project?.id);
+  const activeReady = variant?.render_status === "ready" && Boolean(variant.video_url);
+  htmlButton.disabled = !hasProject || !variant?.preview_url;
+  $("#btnDownloadVideo").disabled = !activeReady;
+  $("#btnDownloadPackage").disabled = !hasProject || ready !== Object.keys(ASPECT_META).length;
+  $("#btnDownloadVideo").title = activeReady ? `${state.aspect} MP4 다운로드` : `${state.aspect} 렌더가 완료되면 다운로드할 수 있습니다.`;
+  $("#btnDownloadHtml").title = hasProject ? `${state.aspect} 독립 HTML 카드 다운로드` : "카드를 먼저 생성하세요.";
+  $("#btnDownloadPackage").title = ready === 3 ? "세 화면비 HTML·MP4와 프로젝트·근거 JSON 다운로드" : `전체 패키지는 3/3 READY 후 사용할 수 있습니다. (현재 ${ready}/3)`;
+  $("#exportHint").textContent = !hasProject
+    ? "카드를 생성하면 HTML을 다운로드할 수 있습니다."
+    : ready === 3
+      ? "3/3 READY · 전체 패키지에 HTML, MP4, 프로젝트와 근거 JSON이 포함됩니다."
+      : `${state.aspect} HTML은 즉시 저장 · 영상 ${ready}/3 READY`;
+}
+
+function downloadActiveHtml() {
+  const variant = activeVariant();
+  if (!variant?.preview_url) return;
+  triggerDownload(versionedArtifactUrl(variant.preview_url, state.project?.updated_at), artifactFilename("html"));
+  toast(`${state.aspect} HTML 카드 다운로드를 시작했습니다.`);
+}
+
+function downloadActiveVideo() {
+  const variant = activeVariant();
+  if (variant?.render_status !== "ready" || !variant.video_url) return;
+  triggerDownload(versionedArtifactUrl(variant.video_url, variant.rendered_at), artifactFilename("mp4"));
+  toast(`${state.aspect} 영상 다운로드를 시작했습니다.`);
+}
+
+function downloadCompletePackage() {
+  const ready = Object.values(state.project?.variants || {}).filter((item) => item.render_status === "ready").length;
+  if (!state.project?.id || ready !== 3) return;
+  triggerDownload(withBase(`/api/projects/${state.project.id}/export-package`), `hyperframes-${state.project.id}-complete.zip`);
+  toast("세 화면비 전체 패키지 다운로드를 시작했습니다.");
 }
 
 function setPreviewPlaying(playing) {
@@ -619,10 +714,6 @@ async function loadHealth() {
   try {
     state.health = await api("/api/health");
     renderRuntimeStatus();
-    $("#btnPush").disabled = !state.health.timeline_configured;
-    $("#pushHint").textContent = state.health.timeline_configured
-      ? "현재 프로젝트를 연결된 Timeline으로 전송합니다."
-      : "Timeline 연결 정보가 없어 비활성화되었습니다.";
     renderDependencies();
   } catch (error) {
     element.dataset.state = "error";
@@ -879,16 +970,6 @@ async function runRender() {
   await startVariantRenderJob();
 }
 
-async function pushTimeline() {
-  if (!state.project?.id || !state.health?.timeline_configured) return;
-  try {
-    const data = await api(`/api/projects/${state.project.id}/push-timeline`, { method: "POST", body: "{}" });
-    toast(`Timeline 등록 완료 · ${data.timeline?.uid || data.timeline?.name || "ok"}`);
-  } catch (error) {
-    toast(error.message, true);
-  }
-}
-
 function wireControls() {
   $("#btnRefresh").addEventListener("click", () => loadTrends(true));
   $("#btnResearch").addEventListener("click", () => collectResearch());
@@ -897,7 +978,9 @@ function wireControls() {
   $("#btnRunRender").addEventListener("click", runRender);
   $("#btnCancelRender").addEventListener("click", closeRenderModal);
   $("#btnCloseRender").addEventListener("click", closeRenderModal);
-  $("#btnPush").addEventListener("click", pushTimeline);
+  $("#btnDownloadVideo").addEventListener("click", downloadActiveVideo);
+  $("#btnDownloadHtml").addEventListener("click", downloadActiveHtml);
+  $("#btnDownloadPackage").addEventListener("click", downloadCompletePackage);
   $("#topicForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const topic = $("#topicInput").value.trim();

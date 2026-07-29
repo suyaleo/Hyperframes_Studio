@@ -18,7 +18,7 @@
       document.documentElement.style.colorScheme = resolved;
     })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=0.3.0"/>
+  <link rel="stylesheet" href="/static/styles.css?v=0.4.0"/>
 </head>
 <body>
   <div class="studio-shell">
@@ -229,10 +229,20 @@
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg>
             영상 렌더
           </button>
-          <button class="studio-button" id="btnPush" type="button" disabled title="Timeline 연결 정보가 필요합니다">
-            Timeline으로 보내기
+          <div class="export-actions" aria-label="현재 화면비 파일 다운로드">
+            <button class="studio-button" id="btnDownloadVideo" type="button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14"/></svg>
+              영상 다운로드
+            </button>
+            <button class="studio-button" id="btnDownloadHtml" type="button" disabled>
+              HTML 카드
+            </button>
+          </div>
+          <button class="studio-button" id="btnDownloadPackage" type="button" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16v13H4zM7 4h10v3M9 11h6M9 15h6"/></svg>
+            전체 패키지 다운로드
           </button>
-          <p id="pushHint">Timeline 연결 정보가 없어 비활성화되었습니다.</p>
+          <p id="exportHint" aria-live="polite">카드를 생성하면 HTML을 다운로드할 수 있습니다.</p>
         </section>
       </aside>
     </main>
@@ -290,6 +300,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script>window.APP_BASE = "";</script>
-  <script src="/static/app.js?v=0.5.0"></script>
+  <script src="/static/app.js?v=0.6.0"></script>
 </body>
 </html>

@@ -4,12 +4,15 @@ import json
 import os
 import shutil
 import threading
+import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -265,6 +268,89 @@ def project_get(pid: str):
     if not p:
         raise HTTPException(404, "project not found")
     return {"ok": True, "project": p}
+
+
+def _package_artifact_path(url: str | None, expected_name: str) -> Path | None:
+    """Resolve a generated /output artifact without accepting arbitrary paths."""
+    name = Path(urlparse(str(url or "")).path).name
+    if name != expected_name:
+        return None
+    candidate = OUT / name
+    return candidate if candidate.is_file() else None
+
+
+@app.get("/api/projects/{pid}/export-package")
+def project_export_package(pid: str):
+    project = get_project(pid)
+    if not project:
+        raise HTTPException(404, "project not found")
+
+    variants = project.get("variants") or {}
+    missing = [
+        aspect
+        for aspect in ASPECT_ORDER
+        if (variants.get(aspect) or {}).get("render_status") != "ready"
+    ]
+    if missing:
+        raise HTTPException(409, detail=f"render not ready: {', '.join(missing)}")
+
+    root = f"hyperframes-{pid}"
+    files: list[dict[str, Any]] = []
+    resolved: list[tuple[str, Path, Path]] = []
+    for aspect in ASPECT_ORDER:
+        variant = variants[aspect]
+        key = str(variant.get("key") or ASPECT_VARIANTS[aspect]["key"])
+        html_path = _package_artifact_path(variant.get("preview_url"), f"{pid}-{key}.html")
+        video_path = _package_artifact_path(variant.get("video_url"), f"{pid}-{key}.mp4")
+        if not html_path or not video_path:
+            raise HTTPException(409, detail=f"artifact missing: {aspect}")
+        html_name = f"html/hyperframes-{key}.html"
+        video_name = f"video/hyperframes-{key}.mp4"
+        files.append(
+            {
+                "aspect_ratio": aspect,
+                "label": variant.get("label"),
+                "width": variant.get("width"),
+                "height": variant.get("height"),
+                "html": html_name,
+                "video": video_name,
+                "rendered_at": variant.get("rendered_at"),
+            }
+        )
+        resolved.append((key, html_path, video_path))
+
+    manifest = {
+        "schema_version": 1,
+        "project_id": pid,
+        "title": project.get("title"),
+        "exported_at": datetime.now(UTC).isoformat(),
+        "duration_seconds": len(project.get("cards") or []) * float(project.get("seconds_per_card") or 3),
+        "files": files,
+    }
+    archive = OUT / f"{pid}-hyperframes-package.zip"
+    temporary = OUT / f".{archive.name}.{uuid4().hex}.tmp"
+    with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as package:
+        package.writestr(f"{root}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        package.writestr(f"{root}/project.json", json.dumps(project, ensure_ascii=False, indent=2))
+        package.writestr(
+            f"{root}/README.txt",
+            "Hyperframes Studio export\n\n"
+            "html/ 폴더에는 화면비별 독립 HTML 카드가, video/ 폴더에는 MP4 영상이 있습니다.\n"
+            "manifest.json에서 해상도와 파일 매핑을 확인할 수 있습니다.\n",
+        )
+        research_id = project.get("research_bundle_id")
+        research = get_research_bundle(str(research_id)) if research_id else None
+        if research:
+            package.writestr(f"{root}/research.json", json.dumps(research, ensure_ascii=False, indent=2))
+        for key, html_path, video_path in resolved:
+            package.write(html_path, f"{root}/html/hyperframes-{key}.html")
+            package.write(video_path, f"{root}/video/hyperframes-{key}.mp4")
+    temporary.replace(archive)
+    return FileResponse(
+        archive,
+        media_type="application/zip",
+        filename=f"hyperframes-{pid}-complete.zip",
+    )
 
 
 @app.post("/api/projects/build")
