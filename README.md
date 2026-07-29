@@ -51,7 +51,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The service is available at `http://127.0.0.1:8770`. Persistent project and render data is stored in the `hyperframes-studio-data` volume. From a container, the default oMLX endpoint is `http://host.docker.internal:8000/v1`; credentials stay in the untracked `.env` file.
+The service is available at `http://127.0.0.1:8770`. Persistent project and render data is stored in the `hyperframes-studio-data` volume. `OMLX_DOCKER_BASE_URL` defaults to `http://host.docker.internal:8000/v1`, while native execution continues to use `OMLX_BASE_URL`; credentials stay in the untracked `.env` file.
 
 ## Distribution channels
 
