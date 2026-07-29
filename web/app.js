@@ -47,6 +47,79 @@ function toast(msg, bad = false) {
   window.__tt = setTimeout(() => (el.hidden = true), 2800);
 }
 
+
+let previewTimer = null;
+let previewIdx = 0;
+
+function cardPreviewHTML(card) {
+  const kind = card?.kind || "headline";
+  if (kind === "bullets") {
+    const lis = (card.bullets || []).map((b) => `<li>${escapeHtml(b)}</li>`).join("");
+    return `<div class="pv-card"><div class="pv-kicker">브리핑</div><h2>${escapeHtml(card.title || "")}</h2><ul>${lis}</ul></div>`;
+  }
+  if (kind === "chart") {
+    return `<div class="pv-card"><div class="pv-kicker">비교</div><h2>${escapeHtml(card.title || "")}</h2>
+      <div class="pv-bars"><div><span>${escapeHtml(card.left_label || "")}</span><b>${escapeHtml(card.left_value || "")}</b></div>
+      <div class="hi"><span>${escapeHtml(card.right_label || "")}</span><b>${escapeHtml(card.right_value || "")}</b></div></div>
+      <p>${escapeHtml(card.unit || "")}</p></div>`;
+  }
+  if (kind === "quote") {
+    return `<div class="pv-card"><div class="pv-kicker">인용</div><blockquote>“${escapeHtml(card.quote || "")}”</blockquote><cite>— ${escapeHtml(card.attribution || "")}</cite></div>`;
+  }
+  if (kind === "cta") {
+    return `<div class="pv-card"><div class="pv-kicker">정리</div><h2>${escapeHtml(card.title || "")}</h2><p>${escapeHtml(card.body || "")}</p><div class="pv-cta">${escapeHtml(card.button || "더보기")}</div></div>`;
+  }
+  return `<div class="pv-card"><div class="pv-kicker">${escapeHtml(card.kicker || "ISSUE")}</div><h1>${escapeHtml(card.title || "")}</h1><p>${escapeHtml(card.subtitle || "")}</p></div>`;
+}
+
+function paintInPagePreview(cards, idx = 0) {
+  const stage = $("#stage");
+  if (!stage) return;
+  const list = cards || [];
+  if (!list.length) {
+    stage.classList.remove("phone-mode");
+    stage.innerHTML = `<div class="empty">카드를 생성하면 여기에 미리보기가 뜹니다</div>`;
+    return;
+  }
+  const phone = state.aspect === "9:16";
+  stage.classList.toggle("phone-mode", !!phone);
+  const i = ((idx % list.length) + list.length) % list.length;
+  previewIdx = i;
+  const card = list[i];
+  stage.innerHTML = `
+    <div class="pv-shell">
+      <div class="pv-meta">${i + 1}/${list.length} · ${escapeHtml(card.kind || "card")}</div>
+      ${cardPreviewHTML(card)}
+      <div class="pv-progress"><i style="width:${((i + 1) / list.length) * 100}%"></i></div>
+    </div>`;
+}
+
+function startPreviewRotation() {
+  if (previewTimer) clearInterval(previewTimer);
+  previewTimer = setInterval(() => {
+    const cards = state.project?.cards || [];
+    if (cards.length < 2) return;
+    paintInPagePreview(cards, previewIdx + 1);
+  }, 2800);
+}
+
+function setPreview(_url) {
+  // Always prefer in-page card preview so user never sees a black iframe.
+  const cards = state.project?.cards || [];
+  if (!cards.length) {
+    paintInPagePreview([]);
+    return;
+  }
+  // If a slide is selected, show that; else first
+  let idx = 0;
+  if (state.selectedCardId) {
+    const found = cards.findIndex((c) => c.id === state.selectedCardId);
+    if (found >= 0) idx = found;
+  }
+  paintInPagePreview(cards, idx);
+  startPreviewRotation();
+}
+
 function escapeHtml(s) {
   return String(s || "")
     .replaceAll("&", "&amp;")
@@ -102,6 +175,10 @@ function renderSlides() {
       state.selectedCardId = el.dataset.id;
       renderSlides();
       renderEditor();
+      const cards = state.project?.cards || [];
+      const idx = cards.findIndex((c) => c.id === state.selectedCardId);
+      paintInPagePreview(cards, idx >= 0 ? idx : 0);
+      startPreviewRotation();
     });
     el.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", el.dataset.id);
@@ -222,18 +299,7 @@ async function saveCard() {
   }
 }
 
-function setPreview(url) {
-  const stage = $("#stage");
-  if (!stage) return;
-  const phone = state.aspect === "9:16";
-  stage.classList.toggle("phone-mode", !!phone);
-  if (!url) {
-    stage.innerHTML = `<div class="empty">카드를 생성하면 여기에 미리보기가 뜹니다</div>`;
-    return;
-  }
-  const src = withBase(url) + (String(url).includes("?") ? "&" : "?") + "t=" + Date.now();
-  stage.innerHTML = `<iframe src="${src}" title="preview"></iframe>`;
-}
+/* setPreview replaced below */
 
 async function loadMeta() {
   state.meta = await api("/api/meta");
@@ -342,7 +408,12 @@ async function renderProject() {
     const r = data.render || {};
     $("#projStatus").textContent = `렌더: ${r.engine || "-"} · ${r.video_url ? "영상 준비" : "HTML 프리뷰"}`;
     if (r.video_url) {
-      const st=$("#stage"); if(st){ st.classList.toggle("phone-mode", state.aspect==="9:16"); st.innerHTML = `<video src="${withBase(r.video_url)}?t=${Date.now()}" controls playsinline></video>`; }
+      if (previewTimer) clearInterval(previewTimer);
+      const st=$("#stage");
+      if(st){
+        st.classList.toggle("phone-mode", state.aspect==="9:16");
+        st.innerHTML = `<video src="${withBase(r.video_url)}?t=${Date.now()}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>`;
+      }
     } else {
       setPreview(r.preview_url || state.project.preview_url);
     }

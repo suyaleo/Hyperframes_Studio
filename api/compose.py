@@ -172,9 +172,9 @@ def project_to_html(project: dict[str, Any]) -> str:
       background:radial-gradient(800px 500px at 80% 0%, rgba(241,90,36,.18), transparent 55%),#0a0a0b;
       overflow:hidden;transform-origin:center center;
     }}
-    .card{{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
-      padding:7%;opacity:0;visibility:hidden;box-sizing:border-box}}
-    .card.active{{opacity:1;visibility:visible}}
+    .card{{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+      padding:7%;box-sizing:border-box}}
+    .card.active{{display:flex}}
     .kicker{{display:inline-block;font-size:clamp(14px,2.6cqw,30px);letter-spacing:.14em;color:#f15a24;font-weight:700;margin-bottom:1rem;text-transform:uppercase}}
     h1{{font-size:clamp(28px,6.2cqw,78px);line-height:1.15;letter-spacing:-.03em;margin:0 0 .7rem;font-weight:780;word-break:keep-all}}
     h2{{font-size:clamp(22px,4.4cqw,54px);margin:0 0 1rem;letter-spacing:-.02em;word-break:keep-all}}
@@ -189,12 +189,12 @@ def project_to_html(project: dict[str, Any]) -> str:
     .cta{{margin-top:1rem;display:inline-flex;padding:.7rem 1.1rem;border-radius:999px;background:linear-gradient(180deg,#ff7a45,#f15a24);color:#fff;font-weight:700;font-size:clamp(14px,2.4cqw,28px)}}
     .progress{{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.08)}}
     .progress>i{{display:block;height:100%;width:0;background:#f15a24}}
-    .m-zoom.active{{animation:zoom .8s ease both}}
-    .m-slide.active{{animation:slide .7s ease both}}
-    .m-kinetic.active h1,.m-kinetic.active h2{{animation:kin .55s ease both}}
-    @keyframes zoom{{from{{transform:scale(1.06);opacity:0}} to{{transform:scale(1);opacity:1}}}}
-    @keyframes slide{{from{{transform:translateX(36px);opacity:0}} to{{transform:none;opacity:1}}}}
-    @keyframes kin{{from{{letter-spacing:.08em;opacity:0}} to{{letter-spacing:-.02em;opacity:1}}}}
+    .m-zoom.active{{animation:zoom .55s ease both}}
+    .m-slide.active{{animation:slide .55s ease both}}
+    .m-kinetic.active h1,.m-kinetic.active h2{{animation:kin .45s ease both}}
+    @keyframes zoom{{from{{transform:scale(1.05)}} to{{transform:scale(1)}}}}
+    @keyframes slide{{from{{transform:translateX(28px)}} to{{transform:none}}}}
+    @keyframes kin{{from{{letter-spacing:.06em}} to{{letter-spacing:-.02em}}}}
   </style>
 </head>
 <body>
@@ -221,8 +221,6 @@ def project_to_html(project: dict[str, Any]) -> str:
       cards.forEach((c,i)=>{{
         const on=i===idx;
         c.classList.toggle('active', on);
-        c.style.opacity=on?'1':'0';
-        c.style.visibility=on?'visible':'hidden';
       }});
     }}
     show(0);
