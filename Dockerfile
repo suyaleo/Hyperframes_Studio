@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 RUN npm install -g hyperframes@0.7.78 \
   && hyperframes browser ensure \
   && hyperframes doctor || true
+COPY remotion-template/package.json remotion-template/package.json
+RUN cd remotion-template && npm install --no-fund --no-audit   && npx remotion browser ensure || true
 COPY . .
 WORKDIR /app/api
 ENV PYTHONUNBUFFERED=1

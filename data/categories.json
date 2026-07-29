@@ -14,10 +14,11 @@
     {"id": "cta", "label": "CTA", "kind": "cta"}
   ],
   "motion_presets": [
-    {"id": "cut", "label": "컷"},
-    {"id": "zoom", "label": "줌"},
-    {"id": "kinetic", "label": "키네틱"},
-    {"id": "slide", "label": "슬라이드인"}
+    {"id": "cut", "label": "컷", "desc": "전환 없이 딱딱 끊김"},
+    {"id": "zoom", "label": "줌", "desc": "확대하며 진입"},
+    {"id": "kinetic", "label": "키네틱", "desc": "타이포·악센트 강조"},
+    {"id": "slide", "label": "슬라이드", "desc": "옆에서 밀고 들어옴"},
+    {"id": "remotion", "label": "Remotion", "desc": "React 모션 엔진 렌더"}
   ],
   "structure": [
     {"id": "hook", "label": "훅"},

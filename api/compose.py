@@ -284,16 +284,65 @@ def project_to_html(project: dict[str, Any]) -> str:
     }}
     .progress {{ position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(255,255,255,.08); }}
     .progress > i {{ display: block; height: 100%; width: 0; background: #f15a24; }}
-    .m-zoom.is-on {{ animation: zoom .45s ease both; }}
-    .m-slide.is-on {{ animation: slide .45s ease both; }}
-    .m-kinetic.is-on h1, .m-kinetic.is-on h2 {{ animation: kin .4s ease both; }}
-    @keyframes zoom {{ from {{ transform: scale(1.04); }} to {{ transform: scale(1); }} }}
-    @keyframes slide {{ from {{ transform: translateX(36px); }} to {{ transform: none; }} }}
-    @keyframes kin {{ from {{ letter-spacing: .05em; }} to {{ letter-spacing: -.02em; }} }}
+    /* ===== MOTION PRESETS (must look different) ===== */
+    .m-cut.is-on {{ animation: none; }}
+    .m-cut .kicker {{ background:#f15a24; color:#111; padding:8px 14px; border-radius:8px; }}
+    .theme-cut #stage {{ background:#0a0a0b; }}
+
+    .m-zoom.is-on {{ animation: zoomIn .55s cubic-bezier(.2,.8,.2,1) both; }}
+    .theme-zoom #stage {{
+      background:
+        radial-gradient(1200px 700px at 50% 40%, rgba(241,90,36,.35), transparent 50%),
+        #070708;
+    }}
+    .m-zoom h1 {{ transform-origin: center; }}
+
+    .m-kinetic.is-on {{ animation: kinIn .5s ease both; }}
+    .theme-kinetic #stage {{
+      background:
+        linear-gradient(135deg, rgba(241,90,36,.25), transparent 40%),
+        repeating-linear-gradient(-12deg, rgba(255,255,255,.03) 0 12px, transparent 12px 24px),
+        #0a0a0b;
+    }}
+    .theme-kinetic .kicker {{
+      border-left: 8px solid #f15a24; padding-left: 16px; letter-spacing: .28em;
+    }}
+    .theme-kinetic h1 {{
+      text-transform: uppercase;
+      letter-spacing: -.04em;
+      text-shadow: 0 0 40px rgba(241,90,36,.35);
+    }}
+    .theme-kinetic h1::after {{
+      content:""; display:block; width:42%; height:10px; margin-top:22px;
+      background: linear-gradient(90deg,#f15a24,#ffb08f); border-radius:999px;
+    }}
+
+    .m-slide.is-on {{ animation: slideIn .55s cubic-bezier(.2,.8,.2,1) both; }}
+    .theme-slide #stage {{
+      background:
+        linear-gradient(90deg, rgba(241,90,36,.22), transparent 45%),
+        #0a0a0b;
+    }}
+    .theme-slide .card {{
+      border-left: 14px solid #f15a24;
+      padding-left: calc({pad}px + 10px);
+    }}
+
+    .theme-remotion #stage {{
+      background:
+        radial-gradient(900px 500px at 85% 0%, rgba(241,90,36,.30), transparent 55%),
+        linear-gradient(160deg,#120b08 0%,#0a0a0b 45%,#0c1018 100%);
+    }}
+    .theme-remotion .kicker {{ color:#ffb08f; }}
+    .theme-remotion .kicker::after {{ content:" · REMOTION"; opacity:.8; }}
+
+    @keyframes zoomIn {{ from {{ transform: scale(1.18); filter: blur(2px); }} to {{ transform: scale(1); filter: none; }} }}
+    @keyframes slideIn {{ from {{ transform: translateX(18%); opacity: 0; }} to {{ transform: none; opacity: 1; }} }}
+    @keyframes kinIn {{ from {{ transform: translateY(40px); letter-spacing: .12em; }} to {{ transform: none; letter-spacing: normal; }} }}
   </style>
 </head>
 <body>
-  <div id="stage"
+  <div id="stage" class="theme-{anim}"
        data-composition-id="leo-card-motion"
        data-start="0"
        data-duration="{total:.2f}"

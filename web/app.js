@@ -86,9 +86,10 @@ function paintInPagePreview(cards, idx = 0) {
   const i = ((idx % list.length) + list.length) % list.length;
   previewIdx = i;
   const card = list[i];
+  const motion = state.project?.motion || state.motion || "zoom";
   stage.innerHTML = `
-    <div class="pv-shell">
-      <div class="pv-meta">${i + 1}/${list.length} · ${escapeHtml(card.kind || "card")}</div>
+    <div class="pv-shell motion-${escapeHtml(motion)}">
+      <div class="pv-meta">${i + 1}/${list.length} · ${escapeHtml(card.kind || "card")} · ${escapeHtml(motion)}</div>
       ${cardPreviewHTML(card)}
       <div class="pv-progress"><i style="width:${((i + 1) / list.length) * 100}%"></i></div>
     </div>`;
@@ -315,20 +316,34 @@ async function loadMeta() {
     })
   );
   const motion = $("#motionChips");
-  const motions = [...(state.meta.motion_presets || []), { id: "remotion", label: "Remotion특화" }];
+  const motions = state.meta.motion_presets || [];
   motion.innerHTML = motions
-    .map((m) => `<button class="chip ${state.motion === m.id ? "active" : ""}" data-motion="${m.id}" type="button">${m.label}</button>`)
+    .map((m) => `<button class="chip ${state.motion === m.id ? "active" : ""}" data-motion="${m.id}" type="button" title="${escapeHtml(m.desc || "")}">${escapeHtml(m.label)}${m.desc ? `<small>${escapeHtml(m.desc)}</small>` : ""}</button>`)
     .join("");
   motion.querySelectorAll("[data-motion]").forEach((b) =>
     b.addEventListener("click", async () => {
       state.motion = b.dataset.motion;
+      if (state.motion === "remotion") state.engine = "remotion";
+      else if (state.engine === "remotion") state.engine = "hyperframes";
+      const engSel = $("#engine");
+      if (engSel) engSel.value = state.engine;
       if (state.project?.id) {
         try {
+          // persist motion on project + refresh composition theme
+          const data = await api(`/api/projects/${state.project.id}/save`, {
+            method: "POST",
+            body: JSON.stringify({ motion: state.motion, engine_hint: state.motion === "remotion" ? "remotion" : state.engine }),
+          });
+          state.project = data.project;
           if (state.motion === "remotion") {
             await api(`/api/projects/${state.project.id}/engine`, { method: "POST", body: JSON.stringify({ engine: "remotion" }) });
-            state.engine = "remotion";
           }
-        } catch (e) {}
+          setPreview();
+        } catch (e) {
+          toast(e.message || String(e), true);
+        }
+      } else {
+        setPreview();
       }
       loadMeta();
     })
@@ -369,13 +384,15 @@ async function buildProject() {
       issue_id: state.selectedIssueId,
       category: state.category,
       template_ids: state.templates,
-      motion: state.motion === "remotion" ? "kinetic" : state.motion,
+      motion: state.motion,
       aspect_ratio: state.aspect,
       seconds_per_card: 3,
     };
     const data = await api("/api/projects/build", { method: "POST", body: JSON.stringify(body) });
     state.project = data.project;
     if (state.motion === "remotion") {
+      state.engine = "remotion";
+      const engSel = $("#engine"); if (engSel) engSel.value = "remotion";
       await api(`/api/projects/${state.project.id}/engine`, { method: "POST", body: JSON.stringify({ engine: "remotion" }) });
       const p2 = await api(`/api/projects/${state.project.id}`);
       state.project = p2.project;
