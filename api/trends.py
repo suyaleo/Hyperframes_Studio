@@ -1,6 +1,7 @@
 from __future__ import annotations
-import hashlib, time
+import hashlib, re, time
 from datetime import datetime, timezone
+from html import unescape
 from typing import Any
 import feedparser
 import httpx
@@ -45,16 +46,14 @@ def _parse_feed(url: str, category: str) -> list[dict[str, Any]]:
         except Exception:
             return []
     for e in (parsed.entries or [])[:12]:
-        title = (e.get("title") or "").strip()
+        title = unescape((e.get("title") or "").strip())
         if not title:
             continue
         link = e.get("link") or ""
-        summary = (e.get("summary") or e.get("description") or "").strip()
-        # strip tags lightly
-        if "<" in summary:
-            import re
-            summary = re.sub(r"<[^>]+>", " ", summary)
-            summary = re.sub(r"\s+", " ", summary).strip()
+        summary = unescape((e.get("summary") or e.get("description") or "").strip())
+        summary = re.sub(r"<[^>]+>", " ", summary)
+        summary = re.sub(r"&nbs(?:p)?;?$", "", summary, flags=re.IGNORECASE)
+        summary = re.sub(r"\s+", " ", summary).strip()
         items.append({
             "id": _id(link or title),
             "title": title[:140],
