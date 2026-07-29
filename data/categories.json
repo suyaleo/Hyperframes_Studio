@@ -9,16 +9,16 @@
   "card_templates": [
     {"id": "headline", "label": "헤드라인", "kind": "headline"},
     {"id": "bullets", "label": "브리핑", "kind": "bullets"},
-    {"id": "chart", "label": "비교/차트", "kind": "chart"},
-    {"id": "quote", "label": "인용", "kind": "quote"},
-    {"id": "cta", "label": "CTA", "kind": "cta"}
+    {"id": "chart", "label": "출처 정보", "kind": "chart"},
+    {"id": "quote", "label": "맥락 문장", "kind": "quote"},
+    {"id": "cta", "label": "원문 안내", "kind": "cta"}
   ],
   "motion_presets": [
-    {"id": "cut", "label": "컷", "desc": "전환 없이 딱딱 끊김"},
-    {"id": "zoom", "label": "줌", "desc": "확대하며 진입"},
-    {"id": "kinetic", "label": "키네틱", "desc": "타이포·악센트 강조"},
-    {"id": "slide", "label": "슬라이드", "desc": "옆에서 밀고 들어옴"},
-    {"id": "remotion", "label": "Remotion", "desc": "React 모션 엔진 렌더"}
+    {"id": "cut", "label": "컷", "desc": "효과 없는 즉시 전환"},
+    {"id": "zoom", "label": "줌", "desc": "부드럽게 확대"},
+    {"id": "kinetic", "label": "키네틱", "desc": "타이포 강조"},
+    {"id": "slide", "label": "슬라이드", "desc": "수평 이동"},
+    {"id": "remotion", "label": "Remotion", "desc": "React 기반 모션"}
   ],
   "structure": [
     {"id": "hook", "label": "훅"},
