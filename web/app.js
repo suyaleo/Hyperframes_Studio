@@ -472,14 +472,27 @@ function updateSummary() {
   updateTransport();
 }
 
+function setCompositionProgress(status, title, message) {
+  const panel = $("#compositionProgress");
+  panel.hidden = status === "idle";
+  panel.dataset.state = status;
+  $("#compositionProgressTitle").textContent = title;
+  $("#compositionProgressMessage").textContent = message;
+  if (status === "running") {
+    $(".studio-inspector__scroll").scrollTop = 0;
+  }
+}
+
 function updateProjectReadiness() {
   const hasInput = Boolean(state.selectedIssueId || state.manualTopic);
   const hasResearch = Boolean(state.research?.id);
   const busy = Boolean(state.operation);
+  $(".studio-inspector").dataset.busy = String(busy);
   const researchButton = $("#btnResearch");
   const buildButton = $("#btnBuild");
   researchButton.disabled = !hasInput || busy;
   buildButton.disabled = !hasInput || busy;
+  $("#btnRender").disabled = !state.project?.id || busy;
   researchButton.classList.remove("studio-button--primary");
   buildButton.classList.toggle("studio-button--primary", hasInput && !busy);
   buildButton.title = hasResearch
@@ -582,6 +595,7 @@ async function collectResearch({ showToast = true } = {}) {
   updateProjectReadiness();
   button.setAttribute("aria-busy", "true");
   button.textContent = "근거 수집 중…";
+  setCompositionProgress("running", "근거 수집 중", `${briefingPreset().label} 모드에 필요한 출처를 정리하고 있습니다.`);
   try {
     const body = {
       category: state.category,
@@ -595,9 +609,13 @@ async function collectResearch({ showToast = true } = {}) {
     renderResearch();
     updateProjectReadiness();
     const count = state.research.evidence?.length || 0;
+    if (ownsOperation) {
+      setCompositionProgress("success", "근거 수집 완료", `검토 가능한 근거 ${count}건을 확보했습니다.`);
+    }
     if (showToast) toast(`근거 ${count}건을 수집했습니다${state.research.status === "partial" ? " · 추가 확인 필요" : ""}.`);
     return state.research;
   } catch (error) {
+    setCompositionProgress("error", "근거 수집 실패", error.message);
     toast(error.message, true);
     return null;
   } finally {
@@ -615,6 +633,7 @@ async function buildProject() {
   const original = button.innerHTML;
   updateProjectReadiness();
   button.setAttribute("aria-busy", "true");
+  setCompositionProgress("running", "근거 확인 중", "스토리보드에 사용할 출처를 준비하고 있습니다.");
   try {
     if (!state.research?.id) {
       button.textContent = "근거 자동 수집 중…";
@@ -622,6 +641,7 @@ async function buildProject() {
       if (!research?.id) return;
     }
     button.textContent = "AI 카드 생성 중…";
+    setCompositionProgress("running", "AI 카드 생성 중", "Gemma가 근거를 조합해 카드 시퀀스와 나레이션을 작성하고 있습니다.");
     const body = {
       research_id: state.research.id,
       template_ids: state.templates,
@@ -643,12 +663,18 @@ async function buildProject() {
     updateSummary();
     $("#projStatus").textContent = `프로젝트 ${state.project.id} · 카드 ${state.project.cards.length}장`;
     renderResearch();
+    setCompositionProgress(
+      "success",
+      "카드 생성 완료",
+      `${state.project.cards.length}장 · 나레이션 ${state.project.cards.filter((card) => String(card.narration || "").trim()).length}/${state.project.cards.length}`,
+    );
     if (data.generation?.mode === "omlx") {
       toast(`oMLX가 근거 기반 카드 ${state.project.cards.length}장을 생성했습니다.`);
     } else {
       toast(`oMLX 미설정 · 규칙 기반 검토용 카드 ${state.project.cards.length}장을 생성했습니다.`, true);
     }
   } catch (error) {
+    setCompositionProgress("error", "카드 생성 실패", error.message);
     toast(error.message, true);
   } finally {
     button.innerHTML = original;

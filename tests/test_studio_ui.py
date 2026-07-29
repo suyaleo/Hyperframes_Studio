@@ -45,5 +45,14 @@ def test_research_first_controls_are_present() -> None:
     assert 'id="summaryNarration"' in html
     assert 'id="briefingMode"' in html
     assert 'id="summaryMode"' in html
+    assert 'id="compositionProgress"' in html
+    assert 'aria-label="Composition 작업"' in html
+    assert html.index('id="compositionProgress"') < html.index('class="studio-inspector__section composition-summary"')
+    actions_start = html.index(
+        '</div>\n\n        <section class="studio-inspector__section inspector-actions"'
+    )
+    assert actions_start < html.index('aria-label="Composition 작업"')
+    assert '/static/styles.css?v=0.2.1' in html
+    assert '/static/app.js?v=0.4.1' in html
     assert "표준 · 10–14장" in html
     assert "근거 수집부터 카드 생성까지 자동으로 진행합니다" in html

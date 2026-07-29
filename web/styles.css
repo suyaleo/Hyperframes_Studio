@@ -191,7 +191,7 @@ html[data-theme="light"] .product-logo--dark { display: none; }
 .studio-list,
 .studio-inspector { min-width: 0; min-height: 0; overflow: hidden; background: var(--sd-panel); }
 .studio-list { display: grid; grid-template-rows: 58px auto minmax(0, 1fr) 32px; border-right: 1px solid var(--sd-border); }
-.studio-inspector { border-left: 1px solid var(--sd-border); }
+.studio-inspector { display: grid; grid-template-rows: 58px minmax(0, 1fr) auto; border-left: 1px solid var(--sd-border); }
 
 .studio-panel-heading {
   display: flex;
@@ -296,7 +296,7 @@ input::placeholder, textarea::placeholder { color: var(--sd-faint); }
 .transport-track i { display: block; width: 0; height: 100%; background: var(--sd-accent); transition: width .2s ease; }
 #projStatus { overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 
-.studio-inspector__scroll { height: calc(100% - 58px); }
+.studio-inspector__scroll { height: auto; overflow-anchor: none; }
 .studio-inspector__section { padding: 13px 14px; border-bottom: 1px solid var(--sd-border); }
 .studio-inspector__section h3 { margin: 0 0 10px; color: var(--sd-text-secondary); font-size: 10px; }
 .section-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
@@ -321,6 +321,14 @@ input::placeholder, textarea::placeholder { color: var(--sd-faint); }
 .composition-summary dt, .production-props dt { color: var(--sd-muted); font-size: 10px; }
 .composition-summary dd, .production-props dd { margin: 0; color: var(--sd-text-secondary); font: 600 10px/1 ui-monospace, monospace; text-align: right; }
 .composition-summary dd.muted { color: var(--sd-faint); }
+.composition-progress { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; background: var(--sd-info-soft); }
+.composition-progress[hidden] { display: none; }
+.composition-progress strong { display: block; color: var(--sd-text-secondary); font-size: 10px; }
+.composition-progress p { margin: 3px 0 0; color: var(--sd-muted); font-size: 8px; line-height: 1.4; }
+.composition-progress[data-state="success"] { background: var(--sd-success-soft); }
+.composition-progress[data-state="success"] .spinner { border-color: var(--sd-success); animation: none; }
+.composition-progress[data-state="error"] { background: var(--sd-danger-soft); }
+.composition-progress[data-state="error"] .spinner { border-color: var(--sd-danger); animation: none; }
 .option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .option-button { padding: 6px; text-align: center; }
 .option-button small { display: block; margin-top: 3px; color: var(--sd-faint); font-size: 8px; font-weight: 500; }
@@ -335,7 +343,7 @@ input::placeholder, textarea::placeholder { color: var(--sd-faint); }
 .editor-fields label { display: grid; gap: 5px; color: var(--sd-muted); font-size: 9px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .save-row { display: flex; justify-content: flex-end; margin-top: 10px; }
-.inspector-actions { display: grid; gap: 7px; }
+.inspector-actions { z-index: 2; display: grid; gap: 7px; border-top: 1px solid var(--sd-border-strong); border-bottom: 0; background: var(--sd-panel); }
 .inspector-actions .studio-button { width: 100%; }
 .inspector-actions p { margin: 0; color: var(--sd-faint); font-size: 8px; line-height: 1.4; }
 
