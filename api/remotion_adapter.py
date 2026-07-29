@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from api.compose import aspect_spec
 from api.settings import OUTPUT_DIR, PROJECTS_DIR, REMOTION_EXPORT_DIR, REMOTION_TEMPLATE_DIR
 
 COMP = PROJECTS_DIR
@@ -17,16 +18,18 @@ REM = REMOTION_EXPORT_DIR
 TEMPLATE = REMOTION_TEMPLATE_DIR
 
 
-def export_remotion_project(project_id: str) -> dict[str, Any]:
+def export_remotion_project(project_id: str, aspect_ratio: str | None = None) -> dict[str, Any]:
     proj_path = COMP / project_id / "project.json"
     if not proj_path.exists():
         raise FileNotFoundError(project_id)
     proj = json.loads(proj_path.read_text(encoding="utf-8"))
-    dest = REM / project_id
+    aspect = aspect_ratio or proj.get("aspect_ratio") or "9:16"
+    key = str(aspect_spec(aspect)["key"])
+    dest = REM / project_id / key
     dest.mkdir(parents=True, exist_ok=True)
     props = {
         "title": proj.get("title") or "Hyperframes Studio",
-        "aspect_ratio": proj.get("aspect_ratio") or "9:16",
+        "aspect_ratio": aspect,
         "secondsPerCard": float(proj.get("seconds_per_card") or 2.5),
         "cards": proj.get("cards") or [],
     }
@@ -46,10 +49,17 @@ def _npx() -> str:
     return exe
 
 
-def render_remotion_style(project_id: str, fps: int = 30) -> dict[str, Any]:
-    meta = export_remotion_project(project_id)
+def render_remotion_style(
+    project_id: str,
+    fps: int = 30,
+    aspect_ratio: str | None = None,
+) -> dict[str, Any]:
+    meta = export_remotion_project(project_id, aspect_ratio=aspect_ratio)
     props_path = Path(meta["props_path"])
-    out_mp4 = OUT / f"{project_id}.mp4"
+    aspect = str(meta["props"]["aspect_ratio"])
+    spec = aspect_spec(aspect)
+    key = str(spec["key"])
+    out_mp4 = OUT / f"{project_id}-{key}.mp4"
     if out_mp4.exists():
         try:
             out_mp4.unlink()
@@ -109,15 +119,18 @@ def render_remotion_style(project_id: str, fps: int = 30) -> dict[str, Any]:
         if proj:
             proj["motion"] = "remotion"
             proj["engine_hint"] = "remotion"
-            save_project(proj)
+            save_project(proj, preserve_renders=True)
     except Exception:
         pass
 
     return {
         "engine": "remotion",
-        "video_url": f"/output/{project_id}.mp4",
+        "video_url": f"/output/{project_id}-{key}.mp4",
         "path": str(out_mp4),
         "fps": fps,
+        "aspect_ratio": aspect,
+        "width": int(spec["width"]),
+        "height": int(spec["height"]),
         "remotion_export": meta.get("path"),
         "detail": detail[-200:],
     }

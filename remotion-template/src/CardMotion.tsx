@@ -39,13 +39,92 @@ type Card = CardMotionProps["cards"][number];
 
 const Slide: React.FC<{ card: Card; index: number }> = ({ card, index }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const enter = spring({ frame, fps, config: { damping: 16, stiffness: 140 } });
   const opacity = interpolate(enter, [0, 1], [0, 1]);
   const y = interpolate(enter, [0, 1], [90, 0]);
   const scale = interpolate(enter, [0, 1], [0.9, 1]);
   const bar = interpolate(frame, [0, 16], [0, 1], { extrapolateRight: "clamp" });
   const kind = card.kind || "headline";
+  const landscape = width > height;
+  const square = width === height;
+  const padding = landscape ? 88 : square ? 70 : 86;
+  const titleSize = landscape ? 86 : square ? 68 : 82;
+  const headingSize = landscape ? 58 : square ? 50 : 60;
+  const bodySize = landscape ? 30 : square ? 29 : 35;
+  const quoteSize = landscape ? 62 : square ? 49 : 58;
+
+  const content = kind === "bullets" ? (
+    <>
+      <div style={{ fontSize: headingSize, fontWeight: 800, marginBottom: 28 }}>{card.title}</div>
+      <ul
+        style={{
+          display: landscape ? "grid" : "block",
+          gridTemplateColumns: landscape ? "1fr 1fr" : undefined,
+          columnGap: landscape ? 34 : undefined,
+          margin: 0,
+          paddingLeft: landscape ? 0 : 34,
+          listStyle: landscape ? "none" : undefined,
+          fontSize: bodySize,
+          color: "#c4bdb3",
+          lineHeight: 1.45,
+        }}
+      >
+        {(card.bullets || []).slice(0, 5).map((bullet, bulletIndex) => (
+          <li
+            key={bulletIndex}
+            style={{
+              minHeight: landscape ? 86 : undefined,
+              marginBottom: 16,
+              borderTop: landscape ? "1px solid rgba(244,241,234,0.14)" : undefined,
+              paddingTop: landscape ? 16 : undefined,
+            }}
+          >
+            {bullet}
+          </li>
+        ))}
+      </ul>
+    </>
+  ) : kind === "quote" ? (
+    <>
+      <div style={{ fontSize: quoteSize, fontWeight: 700, lineHeight: 1.25 }}>“{card.quote}”</div>
+      <div style={{ marginTop: 28, fontSize: bodySize, color: "#c4bdb3" }}>— {card.attribution}</div>
+    </>
+  ) : kind === "chart" ? (
+    <>
+      <div style={{ fontSize: headingSize, fontWeight: 800, marginBottom: 28 }}>{card.title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: landscape ? "1fr 1fr" : "1fr", gap: 18 }}>
+        <Row label={card.left_label} value={card.left_value} bodySize={bodySize} valueSize={headingSize} />
+        <Row label={card.right_label} value={card.right_value} bodySize={bodySize} valueSize={headingSize} hot />
+      </div>
+      <div style={{ marginTop: 18, color: "#c4bdb3", fontSize: bodySize }}>{card.unit}</div>
+    </>
+  ) : kind === "cta" ? (
+    <>
+      <div style={{ fontSize: headingSize, fontWeight: 800 }}>{card.title}</div>
+      <div style={{ marginTop: 20, fontSize: bodySize, color: "#c4bdb3", lineHeight: 1.45 }}>{card.body}</div>
+      <div
+        style={{
+          marginTop: 36,
+          alignSelf: "flex-start",
+          padding: "18px 28px",
+          borderRadius: 999,
+          background: "linear-gradient(180deg,#ff8a57,#f15a24)",
+          fontWeight: 700,
+          fontSize: bodySize,
+        }}
+      >
+        {card.button || "더보기"}
+      </div>
+    </>
+  ) : (
+    <>
+      <div style={{ fontSize: titleSize, fontWeight: 820, lineHeight: 1.15, letterSpacing: "-0.03em" }}>
+        {card.title}
+      </div>
+      <div style={{ marginTop: 22, fontSize: bodySize, color: "#c4bdb3", lineHeight: 1.45 }}>{card.subtitle}</div>
+    </>
+  );
 
   return (
     <AbsoluteFill
@@ -54,7 +133,7 @@ const Slide: React.FC<{ card: Card; index: number }> = ({ card, index }) => {
           "radial-gradient(900px 500px at 85% 0%, rgba(241,90,36,0.30), transparent 55%), linear-gradient(160deg,#120b08 0%,#0a0a0b 45%,#0c1018 100%)",
         color: "#f4f1ea",
         fontFamily: 'Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
-        padding: 96,
+        padding,
         justifyContent: "center",
         opacity,
         transform: `translateY(${y}px) scale(${scale})`,
@@ -83,55 +162,40 @@ const Slide: React.FC<{ card: Card; index: number }> = ({ card, index }) => {
       >
         {(card.kicker || kind || "CARD").toString().toUpperCase()} · REMOTION
       </div>
-      {kind === "bullets" ? (
-        <>
-          <div style={{ fontSize: 56, fontWeight: 800, marginBottom: 28 }}>{card.title}</div>
-          <ul style={{ margin: 0, paddingLeft: 34, fontSize: 34, color: "#b8b3a8", lineHeight: 1.45 }}>
-            {(card.bullets || []).slice(0, 5).map((b, i) => (
-              <li key={i} style={{ marginBottom: 16 }}>{b}</li>
-            ))}
-          </ul>
-        </>
-      ) : kind === "quote" ? (
-        <>
-          <div style={{ fontSize: 54, fontWeight: 700, lineHeight: 1.25 }}>“{card.quote}”</div>
-          <div style={{ marginTop: 28, fontSize: 30, color: "#b8b3a8" }}>— {card.attribution}</div>
-        </>
-      ) : kind === "chart" ? (
-        <>
-          <div style={{ fontSize: 56, fontWeight: 800, marginBottom: 28 }}>{card.title}</div>
-          <div style={{ display: "grid", gap: 18 }}>
-            <Row label={card.left_label} value={card.left_value} />
-            <Row label={card.right_label} value={card.right_value} hot />
-          </div>
-          <div style={{ marginTop: 18, color: "#b8b3a8", fontSize: 28 }}>{card.unit}</div>
-        </>
-      ) : kind === "cta" ? (
-        <>
-          <div style={{ fontSize: 56, fontWeight: 800 }}>{card.title}</div>
-          <div style={{ marginTop: 20, fontSize: 34, color: "#b8b3a8" }}>{card.body}</div>
-          <div
-            style={{
-              marginTop: 36,
-              alignSelf: "flex-start",
-              padding: "18px 28px",
-              borderRadius: 999,
-              background: "linear-gradient(180deg,#ff7a45,#f15a24)",
-              fontWeight: 700,
-              fontSize: 30,
-            }}
-          >
-            {card.button || "더보기"}
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: 72, fontWeight: 820, lineHeight: 1.15, letterSpacing: "-0.03em" }}>
-            {card.title}
-          </div>
-          <div style={{ marginTop: 22, fontSize: 34, color: "#b8b3a8" }}>{card.subtitle}</div>
-        </>
-      )}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: landscape ? "minmax(0, 1.55fr) minmax(260px, 0.45fr)" : "1fr",
+          gridTemplateRows: landscape ? "1fr" : square ? "minmax(0, 1fr) 150px" : "minmax(0, 1fr) 240px",
+          gap: landscape ? 54 : 32,
+          minHeight: 0,
+          flex: 1,
+        }}
+      >
+        <div style={{ display: "flex", minWidth: 0, flexDirection: "column", justifyContent: "center", overflow: "hidden" }}>
+          {content}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: landscape ? "column" : "row",
+            alignItems: landscape ? "stretch" : "flex-end",
+            justifyContent: "space-between",
+            borderLeft: landscape ? "1px solid rgba(244,241,234,0.14)" : undefined,
+            borderTop: landscape ? undefined : "1px solid rgba(244,241,234,0.14)",
+            padding: landscape ? "28px 0 28px 36px" : "24px 0 0",
+            color: "#817a71",
+            fontFamily: "SFMono-Regular, Menlo, monospace",
+            fontSize: 18,
+            fontWeight: 700,
+          }}
+        >
+          <span style={{ color: "rgba(244,241,234,0.12)", fontSize: landscape ? 104 : square ? 72 : 96, lineHeight: 0.9 }}>
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <span style={{ color: "#f15a24", letterSpacing: "0.12em" }}>{kind.toUpperCase()}</span>
+        </div>
+      </div>
       <div style={{ position: "absolute", right: 40, bottom: 36, fontSize: 22, color: "#6a655c" }}>
         REMOTION #{index + 1}
       </div>
@@ -139,7 +203,13 @@ const Slide: React.FC<{ card: Card; index: number }> = ({ card, index }) => {
   );
 };
 
-const Row: React.FC<{ label?: string; value?: string; hot?: boolean }> = ({ label, value, hot }) => (
+const Row: React.FC<{ label?: string; value?: string; hot?: boolean; bodySize: number; valueSize: number }> = ({
+  label,
+  value,
+  hot,
+  bodySize,
+  valueSize,
+}) => (
   <div
     style={{
       display: "flex",
@@ -149,11 +219,11 @@ const Row: React.FC<{ label?: string; value?: string; hot?: boolean }> = ({ labe
       borderRadius: 22,
       border: hot ? "1px solid rgba(241,90,36,0.5)" : "1px solid rgba(244,241,234,0.12)",
       background: "#121214",
-      fontSize: 32,
+      fontSize: bodySize,
     }}
   >
     <span>{label}</span>
-    <b style={{ color: "#f15a24", fontSize: 48 }}>{value}</b>
+    <b style={{ color: "#f15a24", fontSize: valueSize }}>{value}</b>
   </div>
 );
 

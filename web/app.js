@@ -20,8 +20,16 @@ const state = {
   research: null,
   previewIndex: 0,
   previewPlaying: false,
+  showRenderedVideo: false,
   renderRunning: false,
+  renderJob: null,
   operation: null,
+};
+
+const ASPECT_META = {
+  "9:16": { label: "9:16", name: "세로", resolution: "1080 × 1920" },
+  "16:9": { label: "16:9", name: "가로", resolution: "1920 × 1080" },
+  "1:1": { label: "1:1", name: "정방형", resolution: "1080 × 1080" },
 };
 
 const BRIEFING_DEFAULTS = {
@@ -32,6 +40,7 @@ const BRIEFING_DEFAULTS = {
 
 const $ = (selector) => document.querySelector(selector);
 let previewTimer = null;
+let renderPollTimer = null;
 let toastTimer = null;
 let modalOpener = null;
 let themeMediaCleanup = null;
@@ -66,6 +75,74 @@ function briefingPreset() {
 function formatTime(totalSeconds) {
   const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function activeVariant(aspect = state.aspect) {
+  return state.project?.variants?.[aspect] || null;
+}
+
+function variantStateLabel(status) {
+  if (status === "ready") return "READY";
+  if (status === "rendering") return "RENDERING";
+  if (status === "error") return "ERROR";
+  return "PREVIEW";
+}
+
+function renderVariants() {
+  const variants = state.project?.variants || {};
+  const entries = Object.entries(ASPECT_META);
+  const ready = entries.filter(([aspect]) => variants[aspect]?.render_status === "ready").length;
+  const count = $("#variantCount");
+  count.textContent = `${ready}/3 READY`;
+  count.dataset.state = ready === 3 ? "ready" : "partial";
+
+  const rows = entries.map(([aspect, meta]) => {
+    const variant = variants[aspect] || {};
+    const status = variant.render_status || "pending";
+    return `<button class="variant-row" type="button" data-variant-aspect="${aspect}" data-state="${status}" aria-pressed="${state.aspect === aspect}">
+      <strong>${meta.label}</strong>
+      <span>${meta.resolution} · ${meta.name}</span>
+      <b>${variantStateLabel(status)}</b>
+    </button>`;
+  }).join("");
+  $("#variantGrid").innerHTML = rows;
+  $("#renderVariantList").innerHTML = entries.map(([aspect, meta]) => {
+    const status = variants[aspect]?.render_status || "pending";
+    return `<div class="render-variant-item" data-state="${status}"><strong>${meta.label}</strong><span>${meta.resolution}</span><b>${variantStateLabel(status)}</b></div>`;
+  }).join("");
+  document.querySelectorAll("[data-variant-aspect]").forEach((button) => {
+    button.addEventListener("click", () => chooseAspect(button.dataset.variantAspect));
+  });
+
+  const active = activeVariant();
+  const badge = $("#aspectStatus");
+  badge.dataset.state = active?.render_status || "pending";
+  badge.textContent = variantStateLabel(active?.render_status);
+}
+
+async function chooseAspect(aspect) {
+  if (!ASPECT_META[aspect] || aspect === state.aspect) return;
+  state.aspect = aspect;
+  $("#aspect").value = aspect;
+  state.showRenderedVideo = activeVariant(aspect)?.render_status === "ready";
+  updateAspect();
+  renderVariants();
+  paintPreview();
+  if (!state.project?.id) return;
+  try {
+    const data = await api(`/api/projects/${state.project.id}/aspect`, {
+      method: "POST",
+      body: JSON.stringify({ aspect_ratio: aspect }),
+    });
+    state.project = data.project;
+    state.showRenderedVideo = activeVariant()?.render_status === "ready";
+    updateSummary();
+    renderVariants();
+    paintPreview();
+    toast(`${ASPECT_META[aspect].label} ${ASPECT_META[aspect].name} 버전으로 전환했습니다.`);
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 async function api(path, options = {}) {
@@ -306,8 +383,16 @@ function paintPreview() {
     return;
   }
   state.previewIndex = ((state.previewIndex % cards.length) + cards.length) % cards.length;
-  const card = cards[state.previewIndex];
-  stage.innerHTML = `<div class="pv-shell motion-${escapeHtml(state.project.motion || state.motion)}"><div class="pv-meta">${String(state.previewIndex + 1).padStart(2, "0")}/${String(cards.length).padStart(2, "0")} · ${escapeHtml(card.kind)}</div>${cardPreviewHtml(card)}<div class="pv-progress"><i style="width:${((state.previewIndex + 1) / cards.length) * 100}%"></i></div></div>`;
+  const variant = activeVariant();
+  if (state.showRenderedVideo && variant?.video_url) {
+    stage.innerHTML = `<video src="${withBase(variant.video_url)}" controls playsinline aria-label="${escapeHtml(state.aspect)} 렌더 영상"></video>`;
+  } else if (variant?.preview_url) {
+    const params = `preview=1&card=${state.previewIndex}`;
+    stage.innerHTML = `<iframe src="${withBase(variant.preview_url)}?${params}" title="${escapeHtml(state.aspect)} Composition 미리보기"></iframe>`;
+  } else {
+    const card = cards[state.previewIndex];
+    stage.innerHTML = `<div class="pv-shell motion-${escapeHtml(state.project.motion || state.motion)}"><div class="pv-meta">${String(state.previewIndex + 1).padStart(2, "0")}/${String(cards.length).padStart(2, "0")} · ${escapeHtml(card.kind)}</div>${cardPreviewHtml(card)}<div class="pv-progress"><i style="width:${((state.previewIndex + 1) / cards.length) * 100}%"></i></div></div>`;
+  }
   updateTransport();
 }
 
@@ -331,6 +416,7 @@ function selectCard(cardId) {
   if (index < 0) return;
   state.selectedCardId = cardId;
   state.previewIndex = index;
+  state.showRenderedVideo = false;
   setPreviewPlaying(false);
   paintPreview();
   renderSlides();
@@ -444,7 +530,7 @@ async function saveCard() {
 function updateAspect() {
   const frame = $("#stageFrame");
   frame.className = `studio-canvas__frame aspect-${state.aspect.replace(":", "-")}`;
-  $("#summaryResolution").textContent = state.aspect === "9:16" ? "1080 × 1920" : state.aspect === "16:9" ? "1920 × 1080" : "1080 × 1080";
+  $("#summaryResolution").textContent = ASPECT_META[state.aspect]?.resolution || "1080 × 1920";
 }
 
 function updateSummary() {
@@ -470,6 +556,7 @@ function updateSummary() {
   $("#btnRender").disabled = !state.project?.id;
   updateAspect();
   updateTransport();
+  renderVariants();
 }
 
 function setCompositionProgress(status, title, message) {
@@ -654,6 +741,8 @@ async function buildProject() {
     const data = await api("/api/storyboards/generate", { method: "POST", body: JSON.stringify(body) });
     state.project = data.project;
     state.research = data.research;
+    state.aspect = state.project.aspect_ratio || state.aspect;
+    state.showRenderedVideo = false;
     state.selectedCardId = state.project.cards?.[0]?.id || null;
     state.previewIndex = 0;
     state.previewPlaying = false;
@@ -673,6 +762,7 @@ async function buildProject() {
     } else {
       toast(`oMLX 미설정 · 규칙 기반 검토용 카드 ${state.project.cards.length}장을 생성했습니다.`, true);
     }
+    startVariantRenderJob({ auto: true });
   } catch (error) {
     setCompositionProgress("error", "카드 생성 실패", error.message);
     toast(error.message, true);
@@ -701,49 +791,92 @@ function openRenderModal() {
   $("#renderModal").hidden = false;
   $("#renderComposition").textContent = state.project.id;
   $("#renderEngine").textContent = $("#engine").selectedOptions[0].textContent;
-  setRenderState("idle", "준비", 0, "의존성과 출력 설정을 확인한 뒤 렌더를 시작하세요.");
+  renderVariants();
+  if (state.renderJob) {
+    const job = state.renderJob;
+    setRenderState(job.status === "running" ? "running" : job.status, job.phase || "대기", job.percent || 0, job.message || "렌더 상태를 확인하고 있습니다.");
+  } else {
+    const ready = Object.values(state.project.variants || {}).filter((variant) => variant.render_status === "ready").length;
+    setRenderState(ready === 3 ? "success" : "idle", ready === 3 ? "완료" : "준비", Math.round(ready / 3 * 100), `${ready}/3개 화면비 영상이 준비되었습니다.`);
+  }
   renderDependencies();
   $("#btnRunRender").focus();
 }
 
 function closeRenderModal() {
-  if (state.renderRunning) return;
   $("#renderModal").hidden = true;
   modalOpener?.focus();
 }
 
-async function runRender() {
-  if (!state.project?.id || state.renderRunning) return;
-  state.renderRunning = true;
-  $("#btnRunRender").disabled = true;
-  $("#btnCancelRender").disabled = true;
-  $("#btnCloseRender").disabled = true;
-  setRenderState("running", "프레임 생성", 18, `${state.engine} 엔진이 카드 프레임을 구성하고 있습니다.`);
+function scheduleRenderPoll(delay = 2400) {
+  clearTimeout(renderPollTimer);
+  renderPollTimer = window.setTimeout(pollVariantRenderJob, delay);
+}
+
+async function pollVariantRenderJob() {
+  if (!state.project?.id) return;
   try {
-    const data = await api(`/api/projects/${state.project.id}/render`, {
-      method: "POST",
-      body: JSON.stringify({ fps: 30, engine: state.engine }),
-    });
+    const data = await api(`/api/projects/${state.project.id}/render-all/status`);
     state.project = data.project;
-    const render = data.render || {};
-    if (render.video_url) {
-      setPreviewPlaying(false);
-      $("#stage").innerHTML = `<video src="${withBase(render.video_url)}?t=${Date.now()}" controls playsinline aria-label="렌더된 Hyperframes 영상"></video>`;
+    state.renderJob = data.job;
+    state.renderRunning = data.job.status === "running";
+    renderVariants();
+    updateSummary();
+    const errors = Object.values(data.job.errors || {}).join("\n");
+    const visualState = data.job.status === "partial" ? "error" : data.job.status;
+    setRenderState(visualState, data.job.phase || "렌더", data.job.percent || 0, data.job.message || "렌더 상태 확인", errors);
+    $("#btnRunRender").disabled = state.renderRunning;
+    if (state.renderRunning) {
+      scheduleRenderPoll();
+      return;
     }
-    $("#renderOutput").textContent = render.video_url ? `MP4 · ${render.engine}` : "HTML preview";
-    $("#projStatus").textContent = `렌더 완료 · ${render.engine || state.engine}`;
-    setRenderState("success", "완료", 100, `영상 출력이 완료되었습니다 · ${render.engine || state.engine}`);
-    $("#btnRunRender").textContent = "다시 렌더";
-    toast(`영상 렌더 완료 · ${render.engine || state.engine}`);
+    const ready = Object.values(state.project.variants || {}).filter((variant) => variant.render_status === "ready").length;
+    $("#renderOutput").textContent = `MP4 · ${ready}/3 READY`;
+    $("#projStatus").textContent = `화면비 렌더 · ${ready}/3 완료`;
+    $("#btnRunRender").textContent = ready === 3 ? "3개 다시 렌더" : "미완료 비율 다시 렌더";
+    state.showRenderedVideo = activeVariant()?.render_status === "ready";
+    paintPreview();
+    toast(ready === 3 ? "세 가지 화면비 영상이 모두 준비되었습니다." : `${ready}/3개 화면비 렌더 완료`, ready < 3);
   } catch (error) {
-    setRenderState("error", "실패", 100, "렌더를 완료하지 못했습니다. 아래 오류를 확인하세요.", error.message);
-    toast(error.message, true);
-  } finally {
     state.renderRunning = false;
     $("#btnRunRender").disabled = false;
-    $("#btnCancelRender").disabled = false;
-    $("#btnCloseRender").disabled = false;
+    setRenderState("error", "상태 확인 실패", 100, "렌더 상태를 불러오지 못했습니다.", error.message);
+    toast(error.message, true);
   }
+}
+
+async function startVariantRenderJob({ auto = false } = {}) {
+  if (!state.project?.id || state.renderRunning) return;
+  const readyBeforeStart = Object.values(state.project.variants || {}).filter((variant) => variant.render_status === "ready").length;
+  const force = readyBeforeStart === 3;
+  state.renderRunning = true;
+  $("#btnRunRender").disabled = true;
+  setRenderState("running", "대기열 준비", 0, force
+    ? `${state.aspect} 버전부터 세 화면비를 다시 렌더합니다.`
+    : `${state.aspect} 버전을 우선해 미완료 화면비를 이어서 렌더합니다.`);
+  try {
+    const data = await api(`/api/projects/${state.project.id}/render-all`, {
+      method: "POST",
+      body: JSON.stringify({ fps: 30, engine: state.engine, aspect_ratio: state.aspect, force }),
+    });
+    state.project = data.project;
+    state.renderJob = data.job;
+    renderVariants();
+    updateSummary();
+    scheduleRenderPoll(800);
+    if (!auto) toast(force
+      ? "세 가지 화면비 재렌더를 백그라운드에서 시작했습니다."
+      : `${3 - readyBeforeStart}개 미완료 화면비 렌더를 백그라운드에서 시작했습니다.`);
+  } catch (error) {
+    state.renderRunning = false;
+    $("#btnRunRender").disabled = false;
+    setRenderState("error", "시작 실패", 100, "렌더 작업을 시작하지 못했습니다.", error.message);
+    toast(error.message, true);
+  }
+}
+
+async function runRender() {
+  await startVariantRenderJob();
 }
 
 async function pushTimeline() {
@@ -778,10 +911,7 @@ function wireControls() {
     updateProjectReadiness();
     toast("직접 주제를 선택했습니다.");
   });
-  $("#aspect").addEventListener("change", (event) => {
-    state.aspect = event.target.value;
-    updateAspect();
-  });
+  $("#aspect").addEventListener("change", (event) => chooseAspect(event.target.value));
   $("#briefingMode").addEventListener("change", (event) => {
     state.briefingMode = event.target.value;
     state.research = null;
@@ -859,12 +989,10 @@ async function loadProject(projectId) {
   renderResearch();
   updateSummary();
   updateProjectReadiness();
-  if (state.project.render?.video_url) {
-    $("#stage").innerHTML = `<video src="${withBase(state.project.render.video_url)}?t=${Date.now()}" controls playsinline aria-label="렌더된 Hyperframes 영상"></video>`;
-  } else {
-    paintPreview();
-  }
+  state.showRenderedVideo = activeVariant()?.render_status === "ready";
+  paintPreview();
   $("#projStatus").textContent = `프로젝트 ${state.project.id}`;
+  pollVariantRenderJob();
 }
 
 (async function init() {

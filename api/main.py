@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -13,7 +14,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from api.briefing import BRIEFING_PRESETS, BriefingMode, get_briefing_preset
-from api.compose import build_cards_from_issue, get_project, list_projects, project_to_html, save_project
+from api.compose import (
+    ASPECT_VARIANTS,
+    build_cards_from_issue,
+    get_project,
+    list_projects,
+    project_to_html,
+    save_project,
+)
 from api.omlx import OmlxError, generate_storyboard, get_omlx_status
 from api.research import collect_research, get_research_bundle, list_research_bundles
 from api.settings import (
@@ -31,6 +39,9 @@ from api.trends import get_trends
 WEB = WEB_DIR
 OUT = OUTPUT_DIR
 DATA = STATIC_DATA_DIR
+ASPECT_ORDER = tuple(ASPECT_VARIANTS)
+_RENDER_JOBS: dict[str, dict[str, Any]] = {}
+_RENDER_JOBS_LOCK = threading.Lock()
 
 
 def _has_playwright() -> bool:
@@ -64,6 +75,12 @@ class RenderIn(BaseModel):
     project_id: str | None = None
     fps: int = 30
     engine: str | None = None
+    aspect_ratio: str | None = None
+    force: bool = False
+
+
+class AspectIn(BaseModel):
+    aspect_ratio: str
 
 
 class ResearchIn(BaseModel):
@@ -363,35 +380,220 @@ def preview(pid: str):
     return project_to_html(p)
 
 
+def _render_preference(project: dict[str, Any], requested: str | None) -> str:
+    if requested:
+        return requested
+    if project.get("motion") == "remotion" or project.get("engine_hint") == "remotion-adapter":
+        return "remotion"
+    hint = project.get("engine_hint")
+    return str(hint) if hint in {"hyperframes", "playwright", "remotion"} else "auto"
+
+
+def _set_render_job(pid: str, **patch: Any) -> dict[str, Any]:
+    with _RENDER_JOBS_LOCK:
+        current = dict(_RENDER_JOBS.get(pid) or {})
+        current.update(patch)
+        current["project_id"] = pid
+        current["updated_at"] = datetime.now(UTC).isoformat()
+        _RENDER_JOBS[pid] = current
+        return dict(current)
+
+
+def _render_all_variants(pid: str, order: list[str], engine: str | None, fps: int) -> None:
+    from api.render_engine import render_project as _render
+
+    completed = 0
+    total = len(order)
+    errors: dict[str, str] = {}
+    for aspect in order:
+        project = get_project(pid)
+        if not project:
+            _set_render_job(pid, status="error", phase="중단", message="프로젝트를 찾을 수 없습니다.")
+            return
+        preferred = _render_preference(project, engine)
+        variant = project["variants"][aspect]
+        variant["render_status"] = "rendering"
+        variant.pop("error", None)
+        project["variants"][aspect] = variant
+        project["status"] = "rendering"
+        save_project(project, preserve_renders=True, refresh_compositions=False)
+        _set_render_job(
+            pid,
+            status="running",
+            phase=f"{aspect} 렌더",
+            current_aspect=aspect,
+            completed=completed,
+            total=total,
+            percent=round(completed / total * 100),
+            message=f"{variant['label']} 영상을 {preferred} 엔진으로 렌더하고 있습니다.",
+        )
+        try:
+            result = _render(pid, preferred=preferred, fps=fps, aspect_ratio=aspect)
+            project = get_project(pid) or project
+            rendered_at = datetime.now(UTC).isoformat()
+            project["variants"][aspect].update(
+                {
+                    "render_status": "ready",
+                    "video_url": result["video_url"],
+                    "render": {**result, "at": rendered_at},
+                    "rendered_at": rendered_at,
+                }
+            )
+            project["variants"][aspect].pop("error", None)
+            if project.get("aspect_ratio") == aspect:
+                project["render"] = project["variants"][aspect]["render"]
+            save_project(project, preserve_renders=True, refresh_compositions=False)
+        except Exception as error:
+            message = f"{type(error).__name__}: {error}"
+            errors[aspect] = message
+            project = get_project(pid) or project
+            project["variants"][aspect]["render_status"] = "error"
+            project["variants"][aspect]["error"] = message[-700:]
+            save_project(project, preserve_renders=True, refresh_compositions=False)
+        completed += 1
+
+    project = get_project(pid)
+    if project:
+        ready = sum(1 for variant in project["variants"].values() if variant.get("render_status") == "ready")
+        project["status"] = "rendered" if ready else "draft"
+        save_project(project, preserve_renders=True, refresh_compositions=False)
+    final_status = "success" if not errors else ("partial" if completed > len(errors) else "error")
+    _set_render_job(
+        pid,
+        status=final_status,
+        phase="완료" if not errors else "일부 완료",
+        current_aspect=None,
+        completed=completed,
+        total=total,
+        percent=100,
+        errors=errors,
+        message=(
+            "세 가지 화면비 렌더가 모두 준비되었습니다."
+            if not errors
+            else f"{total - len(errors)}/{total}개 화면비 렌더 완료"
+        ),
+    )
+
+
+@app.post("/api/projects/{pid}/aspect")
+def set_aspect(pid: str, body: AspectIn):
+    project = get_project(pid)
+    if not project:
+        raise HTTPException(404, "project not found")
+    if body.aspect_ratio not in ASPECT_VARIANTS:
+        raise HTTPException(400, "unsupported aspect ratio")
+    project["aspect_ratio"] = body.aspect_ratio
+    project = save_project(project, preserve_renders=True, refresh_compositions=False)
+    return {"ok": True, "project": project, "variant": project["variants"][body.aspect_ratio]}
+
+
+@app.post("/api/projects/{pid}/render-all")
+def project_render_all(pid: str, body: RenderIn | None = None):
+    body = body or RenderIn()
+    project = get_project(pid)
+    if not project:
+        raise HTTPException(404, "project not found")
+    with _RENDER_JOBS_LOCK:
+        existing = dict(_RENDER_JOBS.get(pid) or {})
+    if existing.get("status") == "running":
+        return {"ok": True, "started": False, "job": existing, "project": project}
+    candidates = [
+        aspect
+        for aspect in ASPECT_ORDER
+        if body.force or project["variants"][aspect].get("render_status") != "ready"
+    ]
+    if not candidates:
+        job = _set_render_job(
+            pid,
+            status="success",
+            phase="완료",
+            current_aspect=None,
+            completed=len(ASPECT_ORDER),
+            total=len(ASPECT_ORDER),
+            percent=100,
+            errors={},
+            message="세 가지 화면비 렌더가 모두 준비되어 있습니다.",
+        )
+        return {"ok": True, "started": False, "job": job, "project": project}
+    requested_first = (
+        body.aspect_ratio if body.aspect_ratio in ASPECT_VARIANTS else project.get("aspect_ratio", "9:16")
+    )
+    first = requested_first if requested_first in candidates else candidates[0]
+    order = [first, *(aspect for aspect in candidates if aspect != first)]
+    job = _set_render_job(
+        pid,
+        status="running",
+        phase="대기열 준비",
+        current_aspect=first,
+        completed=0,
+        total=len(order),
+        percent=0,
+        errors={},
+        message=f"{first} 화면비부터 렌더를 시작합니다.",
+    )
+    threading.Thread(
+        target=_render_all_variants,
+        args=(pid, order, body.engine, max(1, min(int(body.fps or 30), 60))),
+        daemon=True,
+        name=f"variant-render-{pid}",
+    ).start()
+    return {"ok": True, "started": True, "job": job, "project": project}
+
+
+@app.get("/api/projects/{pid}/render-all/status")
+def project_render_all_status(pid: str):
+    project = get_project(pid)
+    if not project:
+        raise HTTPException(404, "project not found")
+    with _RENDER_JOBS_LOCK:
+        job = dict(_RENDER_JOBS.get(pid) or {})
+    if not job:
+        ready = sum(1 for variant in project["variants"].values() if variant.get("render_status") == "ready")
+        job = {
+            "project_id": pid,
+            "status": "success" if ready == len(ASPECT_ORDER) else "idle",
+            "phase": "완료" if ready == len(ASPECT_ORDER) else "대기",
+            "completed": ready,
+            "total": len(ASPECT_ORDER),
+            "percent": round(ready / len(ASPECT_ORDER) * 100),
+            "message": f"{ready}/{len(ASPECT_ORDER)}개 화면비 준비",
+        }
+    return {"ok": True, "job": job, "project": project}
+
+
 @app.post("/api/projects/{pid}/render")
 def project_render(pid: str, body: RenderIn | None = None):
     body = body or RenderIn()
-    p = get_project(pid)
-    if not p:
+    project = get_project(pid)
+    if not project:
         raise HTTPException(404, "project not found")
-    # ensure composition exists
-    save_project(p)
-    # allow engine override via body.project_id misuse no - use fps only; optional query later
+    aspect = body.aspect_ratio if body.aspect_ratio in ASPECT_VARIANTS else project.get("aspect_ratio", "9:16")
+    project = save_project(project, preserve_renders=True)
     try:
         from api.render_engine import render_project as _render
 
-        # if motion is remotion special
-        pref = (body.engine if getattr(body, "engine", None) else None) or (
-            "remotion"
-            if (p.get("motion") == "remotion" or p.get("engine_hint") == "remotion-adapter")
-            else (p.get("engine_hint") if p.get("engine_hint") in {"hyperframes", "playwright", "remotion"} else "auto")
+        result = _render(
+            pid,
+            preferred=_render_preference(project, body.engine),
+            fps=int(body.fps or 30),
+            aspect_ratio=aspect,
         )
-        result = _render(pid, preferred=pref, fps=int(getattr(body, "fps", None) or 30))
-    except Exception as e:
-        raise HTTPException(500, detail=f"render failed: {e}")
-    p["status"] = "rendered"
-    p["render"] = {
-        **result,
-        "at": datetime.now(UTC).isoformat(),
-        "preview_url": p.get("preview_url") or f"/output/{pid}.html",
-    }
-    save_project(p)
-    return {"ok": True, "project": p, "render": p["render"]}
+    except Exception as error:
+        raise HTTPException(500, detail=f"render failed: {error}") from error
+    rendered_at = datetime.now(UTC).isoformat()
+    project["variants"][aspect].update(
+        {
+            "render_status": "ready",
+            "video_url": result["video_url"],
+            "render": {**result, "at": rendered_at},
+            "rendered_at": rendered_at,
+        }
+    )
+    project["status"] = "rendered"
+    if project.get("aspect_ratio") == aspect:
+        project["render"] = project["variants"][aspect]["render"]
+    project = save_project(project, preserve_renders=True)
+    return {"ok": True, "project": project, "render": project["variants"][aspect]["render"]}
 
 
 class CardUpdateIn(BaseModel):

@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from api.compose import aspect_spec
 from api.settings import OUTPUT_DIR, PROJECTS_DIR
 
 OUT = OUTPUT_DIR
@@ -42,12 +43,16 @@ def ensure_hyperframes_browser() -> dict[str, Any]:
     }
 
 
-def render_with_hyperframes(project_id: str, fps: int = 30) -> dict[str, Any]:
-    comp = COMP / project_id
+def render_with_hyperframes(project_id: str, fps: int = 30, aspect_ratio: str | None = None) -> dict[str, Any]:
+    proj = json.loads((COMP / project_id / "project.json").read_text(encoding="utf-8"))
+    aspect = aspect_ratio or proj.get("aspect_ratio") or "9:16"
+    spec = aspect_spec(aspect)
+    key = str(spec["key"])
+    comp = COMP / project_id / "variants" / key
     html = comp / "index.html"
     if not html.exists():
         raise FileNotFoundError("composition html missing")
-    out_mp4 = OUT / f"{project_id}.mp4"
+    out_mp4 = OUT / f"{project_id}-{key}.mp4"
     if out_mp4.exists():
         try:
             out_mp4.unlink()
@@ -58,11 +63,6 @@ def render_with_hyperframes(project_id: str, fps: int = 30) -> dict[str, Any]:
     ensure_hyperframes_browser()
 
     # Choose resolution preset matching composition aspect
-    try:
-        proj = json.loads((comp / "project.json").read_text(encoding="utf-8"))
-        aspect = proj.get("aspect_ratio") or "9:16"
-    except Exception:
-        aspect = "9:16"
     if aspect == "16:9":
         res = "landscape"  # 1920x1080
     elif aspect == "1:1":
@@ -95,31 +95,31 @@ def render_with_hyperframes(project_id: str, fps: int = 30) -> dict[str, Any]:
         raise RuntimeError(detail or "hyperframes failed")
     return {
         "engine": "hyperframes",
-        "video_url": f"/output/{project_id}.mp4",
+        "video_url": f"/output/{project_id}-{key}.mp4",
         "path": str(out_mp4),
         "fps": fps,
+        "aspect_ratio": aspect,
+        "width": int(spec["width"]),
+        "height": int(spec["height"]),
         "detail": detail[-200:],
     }
 
 
-def render_with_playwright(project_id: str, fps: int = 30) -> dict[str, Any]:
-    html = COMP / project_id / "index.html"
-    if not html.exists():
-        raise FileNotFoundError("composition html missing")
+def render_with_playwright(project_id: str, fps: int = 30, aspect_ratio: str | None = None) -> dict[str, Any]:
     proj = json.loads((COMP / project_id / "project.json").read_text(encoding="utf-8"))
     cards = proj.get("cards") or []
     per = float(proj.get("seconds_per_card") or 3)
     dur = max(per * max(len(cards), 1), 6.0)
-    aspect = proj.get("aspect_ratio") or "9:16"
-    if aspect == "9:16":
-        w, h = 540, 960
-    elif aspect == "16:9":
-        w, h = 960, 540
-    else:
-        w, h = 720, 720
+    aspect = aspect_ratio or proj.get("aspect_ratio") or "9:16"
+    spec = aspect_spec(aspect)
+    key = str(spec["key"])
+    w, h = int(spec["width"]), int(spec["height"])
+    html = COMP / project_id / "variants" / key / "index.html"
+    if not html.exists():
+        raise FileNotFoundError("composition html missing")
 
-    out_webm = OUT / f"{project_id}.webm"
-    out_mp4 = OUT / f"{project_id}.mp4"
+    out_webm = OUT / f"{project_id}-{key}.webm"
+    out_mp4 = OUT / f"{project_id}-{key}.mp4"
     for f in (out_webm, out_mp4):
         if f.exists():
             try:
@@ -158,9 +158,10 @@ def render_with_playwright(project_id: str, fps: int = 30) -> dict[str, Any]:
     if not ffmpeg:
         return {
             "engine": "playwright-webm",
-            "video_url": f"/output/{project_id}.webm",
+            "video_url": f"/output/{project_id}-{key}.webm",
             "path": str(out_webm),
             "fps": fps,
+            "aspect_ratio": aspect,
         }
 
     r = subprocess.run(
@@ -185,19 +186,33 @@ def render_with_playwright(project_id: str, fps: int = 30) -> dict[str, Any]:
     if r.returncode != 0 or not out_mp4.exists():
         return {
             "engine": "playwright-webm",
-            "video_url": f"/output/{project_id}.webm",
+            "video_url": f"/output/{project_id}-{key}.webm",
             "path": str(out_webm),
             "ffmpeg_error": (r.stderr or "")[:300],
             "fps": fps,
+            "aspect_ratio": aspect,
         }
     try:
         out_webm.unlink()
     except OSError:
         pass
-    return {"engine": "playwright+ffmpeg", "video_url": f"/output/{project_id}.mp4", "path": str(out_mp4), "fps": fps}
+    return {
+        "engine": "playwright+ffmpeg",
+        "video_url": f"/output/{project_id}-{key}.mp4",
+        "path": str(out_mp4),
+        "fps": fps,
+        "aspect_ratio": aspect,
+        "width": w,
+        "height": h,
+    }
 
 
-def render_project(project_id: str, preferred: str = "auto", fps: int = 30) -> dict[str, Any]:
+def render_project(
+    project_id: str,
+    preferred: str = "auto",
+    fps: int = 30,
+    aspect_ratio: str | None = None,
+) -> dict[str, Any]:
     default = (os.environ.get("HYPERFRAMES_DEFAULT_ENGINE") or "hyperframes").strip().lower()
     if preferred in (None, "", "auto"):
         preferred = default
@@ -215,21 +230,23 @@ def render_project(project_id: str, preferred: str = "auto", fps: int = 30) -> d
     for eng in order:
         try:
             if eng == "playwright":
-                return render_with_playwright(project_id, fps=fps)
+                return render_with_playwright(project_id, fps=fps, aspect_ratio=aspect_ratio)
             if eng == "hyperframes":
-                return render_with_hyperframes(project_id, fps=fps)
+                return render_with_hyperframes(project_id, fps=fps, aspect_ratio=aspect_ratio)
             if eng == "remotion":
                 from api.remotion_adapter import render_remotion_style
 
-                return render_remotion_style(project_id, fps=fps)
+                return render_remotion_style(project_id, fps=fps, aspect_ratio=aspect_ratio)
             if eng == "ffmpeg":
                 proj = json.loads((COMP / project_id / "project.json").read_text(encoding="utf-8"))
                 cards = proj.get("cards") or []
                 per = float(proj.get("seconds_per_card") or 3)
                 dur = max(per * max(len(cards), 1), 6)
-                aspect = proj.get("aspect_ratio") or "9:16"
-                size = "1080x1920" if aspect == "9:16" else ("1920x1080" if aspect == "16:9" else "1080x1080")
-                out_mp4 = OUT / f"{project_id}.mp4"
+                aspect = aspect_ratio or proj.get("aspect_ratio") or "9:16"
+                spec = aspect_spec(aspect)
+                key = str(spec["key"])
+                size = f"{spec['width']}x{spec['height']}"
+                out_mp4 = OUT / f"{project_id}-{key}.mp4"
                 ffmpeg = _which("ffmpeg")
                 if not ffmpeg:
                     raise RuntimeError("ffmpeg missing")
@@ -255,8 +272,9 @@ def render_project(project_id: str, preferred: str = "auto", fps: int = 30) -> d
                 if out_mp4.exists():
                     return {
                         "engine": "ffmpeg-slate",
-                        "video_url": f"/output/{project_id}.mp4",
+                        "video_url": f"/output/{project_id}-{key}.mp4",
                         "path": str(out_mp4),
+                        "aspect_ratio": aspect,
                         "note": "placeholder slate",
                     }
                 raise RuntimeError("ffmpeg slate failed")

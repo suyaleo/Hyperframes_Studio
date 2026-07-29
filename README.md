@@ -2,7 +2,7 @@
 
 Hyperframes Studio turns a live issue or a user-supplied topic into evidence-backed HTML cards and rendered video. The current `0.1.0` work is being built in verified phases: release foundation first, then the Studio workspace, research orchestration, local oMLX generation, narration, and final rendering.
 
-> Status: pre-release. The current card editor and render adapters are retained while the new AI workflow is built. Repository and container publication remain blocked until every release gate passes.
+> Status: public-source alpha. The local Web/Docker workflow is usable now; narration audio, licensed media enrichment, and external MCP production hardening remain staged work.
 
 ## Current capabilities
 
@@ -13,6 +13,8 @@ Hyperframes Studio turns a live issue or a user-supplied topic into evidence-bac
 - Query expansion for narrow headlines, with broader trend evidence kept as context rather than implied direct evidence
 - oMLX 0.5.x structured-output storyboard generation with an explicitly labeled deterministic fallback when authentication or model configuration is unavailable
 - Editable headline, bullet, chart, quote, and CTA cards
+- One research/storyboard generation produces responsive 9:16, 16:9, and 1:1 compositions without repeating the AI request
+- Instant aspect switching with selected-aspect-first background rendering and per-variant READY/RENDERING/ERROR state
 - Hyperframes-compatible HTML composition output
 - Remotion, Hyperframes, Playwright, and FFmpeg render adapters
 - FastAPI local Web service and Docker Compose packaging
@@ -30,7 +32,7 @@ The creator workspace keeps a documented minimum width of 1024px. At 1180px it c
 2. Collect research with source provenance, including optional biomedical and Korean-law MCP providers.
 3. Choose Short, Standard, or Deep volume and ask a local oMLX model for a schema-constrained storyboard.
 4. Review cards, narration, images, citations, and timing in the Studio workspace.
-5. export Hyperframes HTML or render a Remotion MP4 from the same storyboard data.
+5. Switch instantly among 9:16, 16:9, and 1:1 previews, then render all three MP4 variants from the same storyboard data.
 
 ## Local development
 

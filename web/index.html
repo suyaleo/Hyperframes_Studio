@@ -18,7 +18,7 @@
       document.documentElement.style.colorScheme = resolved;
     })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=0.2.2"/>
+  <link rel="stylesheet" href="/static/styles.css?v=0.3.0"/>
 </head>
 <body>
   <div class="studio-shell">
@@ -110,11 +110,12 @@
             </label>
             <label class="compact-field">
               <span>비율</span>
-              <select id="aspect">
+              <select id="aspect" aria-label="출력 화면비">
                 <option value="9:16">9:16 세로</option>
                 <option value="16:9">16:9 가로</option>
                 <option value="1:1">1:1 정방형</option>
               </select>
+              <span class="aspect-live-status" id="aspectStatus" data-state="pending">PREVIEW</span>
             </label>
           </div>
         </div>
@@ -176,6 +177,14 @@
               <div><dt>Generation</dt><dd id="summaryGeneration" class="muted">대기</dd></div>
               <div><dt>Narration</dt><dd id="summaryNarration" class="muted">미생성</dd></div>
             </dl>
+          </section>
+
+          <section class="studio-inspector__section" aria-labelledby="variantsHeading">
+            <div class="section-heading-row">
+              <h3 id="variantsHeading">화면비 버전</h3>
+              <span class="research-state" id="variantCount">0/3 READY</span>
+            </div>
+            <div class="variant-grid" id="variantGrid" aria-live="polite"></div>
           </section>
 
           <section class="studio-inspector__section research-summary" aria-labelledby="researchHeading">
@@ -265,6 +274,7 @@
           <p id="renderMessage">출력 설정을 확인하고 렌더를 시작하세요.</p>
           <pre id="renderError" hidden></pre>
         </section>
+        <section class="render-variant-list" id="renderVariantList" aria-label="화면비별 렌더 상태"></section>
         <dl class="production-props">
           <div><dt>Composition</dt><dd id="renderComposition">—</dd></div>
           <div><dt>Engine</dt><dd id="renderEngine">Hyperframes</dd></div>
@@ -273,13 +283,13 @@
       </div>
       <footer class="production-footer">
         <button class="studio-button" id="btnCancelRender" type="button">닫기</button>
-        <button class="studio-button studio-button--primary" id="btnRunRender" type="button">렌더 시작</button>
+        <button class="studio-button studio-button--primary" id="btnRunRender" type="button">3개 비율 렌더</button>
       </footer>
     </section>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script>window.APP_BASE = "";</script>
-  <script src="/static/app.js?v=0.4.1"></script>
+  <script src="/static/app.js?v=0.5.0"></script>
 </body>
 </html>
