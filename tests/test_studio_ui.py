@@ -43,3 +43,4 @@ def test_research_first_controls_are_present() -> None:
     assert 'id="researchContent"' in html
     assert 'id="summaryGeneration"' in html
     assert 'id="summaryNarration"' in html
+    assert "근거 수집부터 카드 생성까지 자동으로 진행합니다" in html

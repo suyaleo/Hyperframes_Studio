@@ -20,6 +20,7 @@ const state = {
   previewIndex: 0,
   previewPlaying: false,
   renderRunning: false,
+  operation: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -446,12 +447,16 @@ function updateSummary() {
 function updateProjectReadiness() {
   const hasInput = Boolean(state.selectedIssueId || state.manualTopic);
   const hasResearch = Boolean(state.research?.id);
+  const busy = Boolean(state.operation);
   const researchButton = $("#btnResearch");
   const buildButton = $("#btnBuild");
-  researchButton.disabled = !hasInput;
-  buildButton.disabled = !hasResearch;
-  researchButton.classList.toggle("studio-button--primary", !hasResearch);
-  buildButton.classList.toggle("studio-button--primary", hasResearch);
+  researchButton.disabled = !hasInput || busy;
+  buildButton.disabled = !hasInput || busy;
+  researchButton.classList.remove("studio-button--primary");
+  buildButton.classList.toggle("studio-button--primary", hasInput && !busy);
+  buildButton.title = hasResearch
+    ? "수집된 근거로 AI 카드를 생성합니다."
+    : "근거를 자동 수집한 뒤 AI 카드를 생성합니다.";
 }
 
 async function loadMeta() {
@@ -540,11 +545,13 @@ function renderDependencies() {
   $("#dependencyGrid").innerHTML = dependencies.map(([name, ready, missing]) => `<div class="dependency" data-ready="${ready}" title="${name === "oMLX" ? escapeHtml(ai.reason || "") : ""}"><span>${name}</span><b>${ready ? "READY" : missing}</b></div>`).join("");
 }
 
-async function collectResearch() {
-  if (!(state.selectedIssueId || state.manualTopic)) return;
+async function collectResearch({ showToast = true } = {}) {
+  if (!(state.selectedIssueId || state.manualTopic)) return null;
+  const ownsOperation = !state.operation;
+  if (ownsOperation) state.operation = "research";
   const button = $("#btnResearch");
   const original = button.innerHTML;
-  button.disabled = true;
+  updateProjectReadiness();
   button.setAttribute("aria-busy", "true");
   button.textContent = "근거 수집 중…";
   try {
@@ -559,24 +566,33 @@ async function collectResearch() {
     renderResearch();
     updateProjectReadiness();
     const count = state.research.evidence?.length || 0;
-    toast(`근거 ${count}건을 수집했습니다${state.research.status === "partial" ? " · 추가 확인 필요" : ""}.`);
+    if (showToast) toast(`근거 ${count}건을 수집했습니다${state.research.status === "partial" ? " · 추가 확인 필요" : ""}.`);
+    return state.research;
   } catch (error) {
     toast(error.message, true);
+    return null;
   } finally {
     button.innerHTML = original;
     button.removeAttribute("aria-busy");
+    if (ownsOperation) state.operation = null;
     updateProjectReadiness();
   }
 }
 
 async function buildProject() {
-  if (!state.research?.id) return;
+  if (!(state.selectedIssueId || state.manualTopic) || state.operation) return;
+  state.operation = "build";
   const button = $("#btnBuild");
   const original = button.innerHTML;
-  button.disabled = true;
+  updateProjectReadiness();
   button.setAttribute("aria-busy", "true");
-  button.textContent = "카드 구성 중…";
   try {
+    if (!state.research?.id) {
+      button.textContent = "근거 자동 수집 중…";
+      const research = await collectResearch({ showToast: false });
+      if (!research?.id) return;
+    }
+    button.textContent = "AI 카드 생성 중…";
     const body = {
       research_id: state.research.id,
       template_ids: state.templates,
@@ -607,6 +623,7 @@ async function buildProject() {
   } finally {
     button.innerHTML = original;
     button.removeAttribute("aria-busy");
+    state.operation = null;
     updateProjectReadiness();
   }
 }
@@ -685,7 +702,7 @@ async function pushTimeline() {
 
 function wireControls() {
   $("#btnRefresh").addEventListener("click", () => loadTrends(true));
-  $("#btnResearch").addEventListener("click", collectResearch);
+  $("#btnResearch").addEventListener("click", () => collectResearch());
   $("#btnBuild").addEventListener("click", buildProject);
   $("#btnRender").addEventListener("click", openRenderModal);
   $("#btnRunRender").addEventListener("click", runRender);
