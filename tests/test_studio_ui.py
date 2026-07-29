@@ -52,7 +52,14 @@ def test_research_first_controls_are_present() -> None:
         '</div>\n\n        <section class="studio-inspector__section inspector-actions"'
     )
     assert actions_start < html.index('aria-label="Composition 작업"')
-    assert '/static/styles.css?v=0.2.1' in html
+    assert '/static/styles.css?v=0.2.2' in html
     assert '/static/app.js?v=0.4.1' in html
     assert "표준 · 10–14장" in html
     assert "근거 수집부터 카드 생성까지 자동으로 진행합니다" in html
+
+
+def test_timeline_cannot_expand_the_workspace_past_the_viewport() -> None:
+    css = (ROOT / "web/styles.css").read_text(encoding="utf-8")
+
+    assert "grid-template-columns: minmax(0, 1fr);" in css
+    assert ".studio-timeline { min-width: 0; min-height: 0; overflow: hidden;" in css
