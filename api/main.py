@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from trends import get_trends
-from compose import build_cards_from_issue, save_project, list_projects, get_project, project_to_html
+from compose import build_cards_from_issue, save_project, list_projects, get_project, project_to_html, issue_title_and_source
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -27,7 +27,7 @@ def _has_playwright() -> bool:
     except Exception:
         return False
 
-app = FastAPI(title="Leo Card Motion", version="0.4.0")
+app = FastAPI(title="Leo Card Studio", version="0.6.0")
 
 app.mount("/static", StaticFiles(directory=str(WEB)), name="static")
 app.mount("/output", StaticFiles(directory=str(OUT)), name="output")
@@ -61,7 +61,7 @@ def health():
     return {
         "ok": True,
         "service": "leo-card-motion",
-        "version": "0.4.0",
+        "version": "0.6.0",
         "engine": "hyperframes-compatible-html",
         "ffmpeg": bool(shutil.which("ffmpeg")),
         "playwright": _has_playwright(),
@@ -113,9 +113,10 @@ def project_build(body: BuildIn):
     if not issue.get("title"):
         raise HTTPException(400, detail="title or issue required")
     cards = build_cards_from_issue(issue, template_ids=body.template_ids, structure=body.structure)
+    project_title, _ = issue_title_and_source(issue)
     project = {
         "id": uuid4().hex[:10],
-        "title": issue.get("title"),
+        "title": project_title,
         "issue": issue,
         "cards": cards,
         "motion": body.motion,
@@ -201,6 +202,8 @@ def update_card(pid: str, body: CardUpdateIn):
     if not found:
         raise HTTPException(404, "card not found")
     p["cards"] = cards
+    p["status"] = "draft"
+    p["render"] = None
     p = save_project(p)
     return {"ok": True, "project": p}
 
@@ -218,6 +221,8 @@ def reorder_cards(pid: str, body: dict[str, Any]):
         if c not in new_cards:
             new_cards.append(c)
     p["cards"] = new_cards
+    p["status"] = "draft"
+    p["render"] = None
     p = save_project(p)
     return {"ok": True, "project": p}
 
@@ -231,6 +236,8 @@ def set_engine(pid: str, body: EngineIn):
     if eng not in {"auto", "playwright", "hyperframes", "remotion"}:
         raise HTTPException(400, detail="bad engine")
     p["engine_hint"] = "remotion-adapter" if eng == "remotion" else eng
+    p["status"] = "draft"
+    p["render"] = None
     if eng == "remotion":
         p["motion"] = "kinetic"
         from remotion_adapter import export_remotion_project
