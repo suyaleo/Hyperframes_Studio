@@ -52,15 +52,29 @@ def render_with_hyperframes(project_id: str, fps: int = 30) -> dict[str, Any]:
     # ensure chrome once (cheap if already present)
     ensure_hyperframes_browser()
 
+    # Choose resolution preset matching composition aspect
+    try:
+        proj = json.loads((comp / "project.json").read_text(encoding="utf-8"))
+        aspect = proj.get("aspect_ratio") or "9:16"
+    except Exception:
+        aspect = "9:16"
+    if aspect == "16:9":
+        res = "landscape"  # 1920x1080
+    elif aspect == "1:1":
+        res = "square"
+    else:
+        res = "portrait"  # 1080x1920
+
     cmd = _hyperframes_bin() + [
         "render",
         str(comp),
         "-o", str(out_mp4),
         "-f", str(max(1, min(int(fps or 30), 60))),
-        "-q", "draft" if os.environ.get("PRODUCER_LOW_MEMORY_MODE") == "1" else "standard",
+        "-q", "standard",
         "--workers", "1",
         "--low-memory-mode",
         "--no-browser-gpu",
+        "--resolution", res,
         "--quiet",
     ]
     env = os.environ.copy()

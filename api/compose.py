@@ -102,9 +102,22 @@ def build_cards_from_issue(
     return cards
 
 
+
 def project_to_html(project: dict[str, Any]) -> str:
+    """HTML composition for Hyperframes/Playwright render.
+
+    Critical: NO viewport fit-scaling. Stage is exact design pixels so
+    headless capture at data-width x data-height is not letterboxed/clipped.
+    Card switching is seek-driven via window.__timelines for Hyperframes.
+    """
     aspect = project.get("aspect_ratio") or "9:16"
-    w, h = (1080, 1920) if aspect == "9:16" else ((1920, 1080) if aspect == "16:9" else (1080, 1080))
+    if aspect == "9:16":
+        w, h = 1080, 1920
+    elif aspect == "16:9":
+        w, h = 1920, 1080
+    else:
+        w, h = 1080, 1080
+
     cards = project.get("cards") or []
     per = float(project.get("seconds_per_card") or 3.0)
     total = max(per * max(len(cards), 1), 6.0)
@@ -118,13 +131,19 @@ def project_to_html(project: dict[str, Any]) -> str:
         "remotion": "kinetic",
     }.get(motion, "zoom")
 
+    # Fixed typography in design pixels (render-safe; no cqw/vw)
+    if w >= h:  # landscape
+        f_kicker, f_h1, f_h2, f_body, f_quote, pad = 28, 72, 56, 34, 52, 96
+    else:  # portrait / square
+        f_kicker, f_h1, f_h2, f_body, f_quote, pad = 30, 78, 58, 36, 56, 86
+
     def card_html(c: dict[str, Any], idx: int) -> str:
-        start = idx * per
+        start_t = idx * per
         kind = c.get("kind") or "headline"
-        active = " active" if idx == 0 else ""
+        active = " is-on" if idx == 0 else ""
         common = (
             f'class="clip card card-{kind} m-{anim}{active}" '
-            f'data-start="{start:.2f}" data-duration="{per:.2f}" data-track-index="1" '
+            f'data-start="{start_t:.2f}" data-duration="{per:.2f}" data-track-index="1" '
             f'data-card-id="{_esc(c.get("id", ""))}"'
         )
         if kind == "headline":
@@ -161,91 +180,199 @@ def project_to_html(project: dict[str, Any]) -> str:
 <html lang="ko">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width={w}, height={h}, initial-scale=1"/>
   <title>{_esc(title)}</title>
   <style>
-    html,body{{margin:0;width:100%;height:100%;overflow:hidden;background:#0a0a0b;color:#f4f1ea;
-      font-family:Pretendard,Apple SD Gothic Neo,Noto Sans KR,sans-serif}}
-    .viewport{{width:100%;height:100%;display:grid;place-items:center;background:#0a0a0b}}
-    #stage{{
-      position:relative;width:{w}px;height:{h}px;flex:0 0 auto;
-      background:radial-gradient(800px 500px at 80% 0%, rgba(241,90,36,.18), transparent 55%),#0a0a0b;
-      overflow:hidden;transform-origin:center center;
+    html, body {{
+      margin: 0; padding: 0;
+      width: {w}px; height: {h}px;
+      overflow: hidden;
+      background: #0a0a0b;
+      color: #f4f1ea;
+      font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
     }}
-    .card{{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
-      padding:7%;box-sizing:border-box}}
-    .card.active{{display:flex}}
-    .kicker{{display:inline-block;font-size:clamp(14px,2.6cqw,30px);letter-spacing:.14em;color:#f15a24;font-weight:700;margin-bottom:1rem;text-transform:uppercase}}
-    h1{{font-size:clamp(28px,6.2cqw,78px);line-height:1.15;letter-spacing:-.03em;margin:0 0 .7rem;font-weight:780;word-break:keep-all}}
-    h2{{font-size:clamp(22px,4.4cqw,54px);margin:0 0 1rem;letter-spacing:-.02em;word-break:keep-all}}
-    .sub,p,li,cite{{color:#b8b3a8;font-size:clamp(14px,2.7cqw,34px);line-height:1.45;word-break:keep-all}}
-    ul{{margin:0;padding-left:1.1em}} li{{margin:0 0 .55rem}}
-    blockquote{{font-size:clamp(22px,4.2cqw,52px);line-height:1.3;margin:0;color:#f4f1ea;font-weight:650;word-break:keep-all}}
-    cite{{display:block;margin-top:1rem}}
-    .chart{{display:grid;gap:.7rem;margin-top:.4rem}}
-    .bar{{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;border:1px solid rgba(244,241,234,.12);border-radius:16px;background:#121214}}
-    .bar.hi{{border-color:rgba(241,90,36,.45);box-shadow:0 0 0 1px rgba(241,90,36,.2)}}
-    .bar strong{{font-size:clamp(22px,4cqw,54px);color:#f15a24}}
-    .cta{{margin-top:1rem;display:inline-flex;padding:.7rem 1.1rem;border-radius:999px;background:linear-gradient(180deg,#ff7a45,#f15a24);color:#fff;font-weight:700;font-size:clamp(14px,2.4cqw,28px)}}
-    .progress{{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.08)}}
-    .progress>i{{display:block;height:100%;width:0;background:#f15a24}}
-    .m-zoom.active{{animation:zoom .55s ease both}}
-    .m-slide.active{{animation:slide .55s ease both}}
-    .m-kinetic.active h1,.m-kinetic.active h2{{animation:kin .45s ease both}}
-    @keyframes zoom{{from{{transform:scale(1.05)}} to{{transform:scale(1)}}}}
-    @keyframes slide{{from{{transform:translateX(28px)}} to{{transform:none}}}}
-    @keyframes kin{{from{{letter-spacing:.06em}} to{{letter-spacing:-.02em}}}}
+    #stage {{
+      position: relative;
+      width: {w}px;
+      height: {h}px;
+      overflow: hidden;
+      background:
+        radial-gradient(900px 520px at 80% 0%, rgba(241,90,36,.20), transparent 55%),
+        #0a0a0b;
+      /* NEVER scale in render composition */
+      transform: none !important;
+    }}
+    .card {{
+      position: absolute; inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: {pad}px;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }}
+    .card.is-on {{
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }}
+    .kicker {{
+      display: inline-block;
+      font-size: {f_kicker}px;
+      letter-spacing: .14em;
+      color: #f15a24;
+      font-weight: 700;
+      margin-bottom: 28px;
+      text-transform: uppercase;
+    }}
+    h1 {{
+      font-size: {f_h1}px;
+      line-height: 1.18;
+      letter-spacing: -.03em;
+      margin: 0 0 22px;
+      font-weight: 780;
+      word-break: keep-all;
+      max-width: 100%;
+    }}
+    h2 {{
+      font-size: {f_h2}px;
+      line-height: 1.2;
+      margin: 0 0 28px;
+      letter-spacing: -.02em;
+      word-break: keep-all;
+    }}
+    .sub, p, li, cite {{
+      color: #b8b3a8;
+      font-size: {f_body}px;
+      line-height: 1.45;
+      word-break: keep-all;
+      margin: 0;
+    }}
+    ul {{ margin: 0; padding-left: 1.15em; }}
+    li {{ margin: 0 0 18px; }}
+    blockquote {{
+      font-size: {f_quote}px;
+      line-height: 1.28;
+      margin: 0;
+      color: #f4f1ea;
+      font-weight: 650;
+      word-break: keep-all;
+    }}
+    cite {{ display: block; margin-top: 28px; }}
+    .chart {{ display: grid; gap: 18px; margin-top: 8px; }}
+    .bar {{
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 22px 26px;
+      border: 1px solid rgba(244,241,234,.12);
+      border-radius: 22px;
+      background: #121214;
+      font-size: {f_body}px;
+    }}
+    .bar.hi {{ border-color: rgba(241,90,36,.45); box-shadow: 0 0 0 1px rgba(241,90,36,.2); }}
+    .bar strong {{ font-size: {int(f_h2*0.9)}px; color: #f15a24; }}
+    .cta {{
+      margin-top: 32px;
+      display: inline-flex;
+      padding: 18px 28px;
+      border-radius: 999px;
+      background: linear-gradient(180deg,#ff7a45,#f15a24);
+      color: #fff;
+      font-weight: 700;
+      font-size: {f_body}px;
+    }}
+    .progress {{ position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(255,255,255,.08); }}
+    .progress > i {{ display: block; height: 100%; width: 0; background: #f15a24; }}
+    .m-zoom.is-on {{ animation: zoom .45s ease both; }}
+    .m-slide.is-on {{ animation: slide .45s ease both; }}
+    .m-kinetic.is-on h1, .m-kinetic.is-on h2 {{ animation: kin .4s ease both; }}
+    @keyframes zoom {{ from {{ transform: scale(1.04); }} to {{ transform: scale(1); }} }}
+    @keyframes slide {{ from {{ transform: translateX(36px); }} to {{ transform: none; }} }}
+    @keyframes kin {{ from {{ letter-spacing: .05em; }} to {{ letter-spacing: -.02em; }} }}
   </style>
 </head>
 <body>
-  <div class="viewport">
-    <div id="stage" data-composition-id="leo-card-motion" data-start="0" data-duration="{total:.2f}" data-fps="30" data-width="{w}" data-height="{h}" data-motion="{anim}">
-      {slides}
-      <div class="progress"><i id="bar"></i></div>
-    </div>
+  <div id="stage"
+       data-composition-id="leo-card-motion"
+       data-start="0"
+       data-duration="{total:.2f}"
+       data-fps="30"
+       data-width="{w}"
+       data-height="{h}"
+       data-motion="{anim}">
+    {slides}
+    <div class="progress"><i id="bar"></i></div>
   </div>
   <script>
-    const stage=document.getElementById('stage');
-    const designW={w}, designH={h};
-    function fit(){{
-      const vw=window.innerWidth||designW, vh=window.innerHeight||designH;
-      const sc=Math.min(vw/designW, vh/designH);
-      stage.style.transform='scale('+sc+')';
-    }}
-    fit();
-    window.addEventListener('resize', fit);
+    (function() {{
+      const cards = Array.from(document.querySelectorAll('.card'));
+      const per = {per:.2f};
+      const total = {total:.2f};
+      const bar = document.getElementById('bar');
+      let current = -1;
 
-    const cards=[...document.querySelectorAll('.card')];
-    const per={per:.2f}; const total={total:.2f};
-    function show(idx){{
-      cards.forEach((c,i)=>{{
-        const on=i===idx;
-        c.classList.toggle('active', on);
-      }});
-    }}
-    show(0);
-    let t0=performance.now();
-    function frame(now){{
-      const t=((now-t0)/1000)%total;
-      const idx=Math.min(Math.max(cards.length-1,0), Math.floor(t/per));
-      show(idx);
-      const bar=document.getElementById('bar'); if(bar) bar.style.width=((t/total)*100).toFixed(2)+'%';
-      requestAnimationFrame(frame);
-    }}
-    if(cards.length) requestAnimationFrame(frame);
+      function showAt(timeSec) {{
+        const t = Math.max(0, Math.min(total - 0.0001, Number(timeSec) || 0));
+        const idx = cards.length ? Math.min(cards.length - 1, Math.floor(t / per)) : 0;
+        if (idx !== current) {{
+          current = idx;
+          cards.forEach((c, i) => c.classList.toggle('is-on', i === idx));
+        }}
+        if (bar) bar.style.width = ((t / total) * 100).toFixed(3) + '%';
+      }}
 
-    window.__timelines = window.__timelines || {{}};
-    window.__timelines['leo-card-motion'] = {{
-      paused:false, t:0,
-      pause(){{this.paused=true}},
-      play(){{this.paused=false}},
-      seek(t){{ this.t=Math.max(0,Number(t)||0); show(Math.min(Math.max(cards.length-1,0), Math.floor(this.t/per))); }}
-    }};
-    window.__hf = window.__hf || {{ ready:true }};
-    window.__hyperframes = window.__hyperframes || {{ getVariables(){{ return {{}}; }} }};
+      // initial
+      showAt(0);
+
+      // Hyperframes seek API
+      window.__timelines = window.__timelines || {{}};
+      window.__timelines['leo-card-motion'] = {{
+        paused: false,
+        t: 0,
+        pause() {{ this.paused = true; }},
+        play() {{ this.paused = false; }},
+        seek(t) {{ this.t = Number(t) || 0; showAt(this.t); }},
+        progress(t) {{ this.seek(t); }},
+      }};
+
+      // Some runtimes call these hooks
+      window.__hf = Object.assign(window.__hf || {{}}, {{ ready: true }});
+      window.__hyperframes = window.__hyperframes || {{
+        getVariables() {{ return {{}}; }},
+      }};
+
+      // Fallback wall-clock preview when opened directly in a browser tab
+      // (Hyperframes render uses seek(); this keeps standalone HTML usable)
+      const params = new URLSearchParams(location.search);
+      const forceLive = params.get('live') === '1' || !window.chrome;
+      let started = performance.now();
+      function tick(now) {{
+        // If external seek advanced time recently, don't fight it.
+        const tl = window.__timelines['leo-card-motion'];
+        if (tl && tl._external) {{
+          requestAnimationFrame(tick);
+          return;
+        }}
+        const t = ((now - started) / 1000) % total;
+        showAt(t);
+        requestAnimationFrame(tick);
+      }}
+      // Always run live clock; Hyperframes seek() still overrides current class each frame it seeks.
+      requestAnimationFrame(tick);
+
+      // Wrap seek to mark external control
+      const tl = window.__timelines['leo-card-motion'];
+      const rawSeek = tl.seek.bind(tl);
+      tl.seek = function(t) {{
+        this._external = true;
+        rawSeek(t);
+      }};
+    }})();
   </script>
 </body>
 </html>"""
+
 
 
 def save_project(project: dict[str, Any]) -> dict[str, Any]:
