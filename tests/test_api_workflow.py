@@ -88,8 +88,13 @@ def test_complete_export_package_contains_all_aspect_outputs(tmp_path, monkeypat
     monkeypatch.setattr(main, "get_project", lambda _pid: project)
     monkeypatch.setattr(main, "get_research_bundle", lambda _rid: None)
 
+    html_response = CLIENT.get("/api/projects/export-test/export-html/landscape")
     response = CLIENT.get("/api/projects/export-test/export-package")
 
+    assert html_response.status_code == 200
+    assert 'filename="hyperframes-export-test-landscape.html"' in html_response.headers["content-disposition"]
+    assert 'data-export-mode="deck"' in html_response.text
+    assert 'id="deckNext"' in html_response.text
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
     assert "hyperframes-export-test-complete.zip" in response.headers["content-disposition"]
@@ -99,8 +104,14 @@ def test_complete_export_package_contains_all_aspect_outputs(tmp_path, monkeypat
         assert "hyperframes-export-test/project.json" in names
         assert "hyperframes-export-test/README.txt" in names
         for spec in main.ASPECT_VARIANTS.values():
-            assert f"hyperframes-export-test/html/hyperframes-{spec['key']}.html" in names
+            assert f"hyperframes-export-test/html/{spec['key']}/index.html" in names
+            assert f"hyperframes-export-test/html/{spec['key']}/cards/card-01.html" in names
+            assert f"hyperframes-export-test/source/hyperframes-{spec['key']}.composition.html" in names
             assert f"hyperframes-export-test/video/hyperframes-{spec['key']}.mp4" in names
+            deck = archive.read(f"hyperframes-export-test/html/{spec['key']}/index.html").decode()
+            card = archive.read(f"hyperframes-export-test/html/{spec['key']}/cards/card-01.html").decode()
+            assert 'data-export-mode="deck"' in deck
+            assert 'data-export-mode="card"' in card
 
 
 def test_export_package_waits_for_all_variants(monkeypatch) -> None:

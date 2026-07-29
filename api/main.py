@@ -279,6 +279,29 @@ def _package_artifact_path(url: str | None, expected_name: str) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+def _aspect_for_variant_key(variant_key: str) -> str | None:
+    return next(
+        (aspect for aspect, spec in ASPECT_VARIANTS.items() if spec["key"] == variant_key),
+        None,
+    )
+
+
+@app.get("/api/projects/{pid}/export-html/{variant_key}")
+def project_export_html(pid: str, variant_key: str, inline: bool = False):
+    project = get_project(pid)
+    if not project:
+        raise HTTPException(404, "project not found")
+    aspect = _aspect_for_variant_key(variant_key)
+    if not aspect:
+        raise HTTPException(404, "aspect variant not found")
+    return HTMLResponse(
+        project_to_html(project, aspect_ratio=aspect, export_mode="deck"),
+        headers={}
+        if inline
+        else {"Content-Disposition": f'attachment; filename="hyperframes-{pid}-{variant_key}.html"'},
+    )
+
+
 @app.get("/api/projects/{pid}/export-package")
 def project_export_package(pid: str):
     project = get_project(pid)
@@ -296,7 +319,7 @@ def project_export_package(pid: str):
 
     root = f"hyperframes-{pid}"
     files: list[dict[str, Any]] = []
-    resolved: list[tuple[str, Path, Path]] = []
+    resolved: list[tuple[str, str, Path, Path]] = []
     for aspect in ASPECT_ORDER:
         variant = variants[aspect]
         key = str(variant.get("key") or ASPECT_VARIANTS[aspect]["key"])
@@ -304,8 +327,12 @@ def project_export_package(pid: str):
         video_path = _package_artifact_path(variant.get("video_url"), f"{pid}-{key}.mp4")
         if not html_path or not video_path:
             raise HTTPException(409, detail=f"artifact missing: {aspect}")
-        html_name = f"html/hyperframes-{key}.html"
+        html_name = f"html/{key}/index.html"
         video_name = f"video/hyperframes-{key}.mp4"
+        card_names = [
+            f"html/{key}/cards/card-{index + 1:02d}.html"
+            for index, _card in enumerate(project.get("cards") or [])
+        ]
         files.append(
             {
                 "aspect_ratio": aspect,
@@ -313,11 +340,13 @@ def project_export_package(pid: str):
                 "width": variant.get("width"),
                 "height": variant.get("height"),
                 "html": html_name,
+                "cards": card_names,
+                "composition_source": f"source/hyperframes-{key}.composition.html",
                 "video": video_name,
                 "rendered_at": variant.get("rendered_at"),
             }
         )
-        resolved.append((key, html_path, video_path))
+        resolved.append((aspect, key, html_path, video_path))
 
     manifest = {
         "schema_version": 1,
@@ -335,15 +364,32 @@ def project_export_package(pid: str):
         package.writestr(
             f"{root}/README.txt",
             "Hyperframes Studio export\n\n"
-            "html/ 폴더에는 화면비별 독립 HTML 카드가, video/ 폴더에는 MP4 영상이 있습니다.\n"
+            "html/<화면비>/index.html은 이전·다음 탐색이 가능한 카드 덱입니다.\n"
+            "html/<화면비>/cards/에는 카드별 독립 HTML 소스가 있습니다.\n"
+            "source/에는 영상 렌더용 Hyperframes composition 원본이, video/에는 MP4가 있습니다.\n"
             "manifest.json에서 해상도와 파일 매핑을 확인할 수 있습니다.\n",
         )
         research_id = project.get("research_bundle_id")
         research = get_research_bundle(str(research_id)) if research_id else None
         if research:
             package.writestr(f"{root}/research.json", json.dumps(research, ensure_ascii=False, indent=2))
-        for key, html_path, video_path in resolved:
-            package.write(html_path, f"{root}/html/hyperframes-{key}.html")
+        for aspect, key, html_path, video_path in resolved:
+            package.writestr(
+                f"{root}/html/{key}/index.html",
+                project_to_html(project, aspect_ratio=aspect, export_mode="deck"),
+            )
+            for index, card in enumerate(project.get("cards") or []):
+                export_card = {**card, "_export_index": index + 1}
+                card_project = {
+                    **project,
+                    "cards": [export_card],
+                    "title": card.get("title") or card.get("quote") or project.get("title"),
+                }
+                package.writestr(
+                    f"{root}/html/{key}/cards/card-{index + 1:02d}.html",
+                    project_to_html(card_project, aspect_ratio=aspect, export_mode="card", export_card_index=0),
+                )
+            package.write(html_path, f"{root}/source/hyperframes-{key}.composition.html")
             package.write(video_path, f"{root}/video/hyperframes-{key}.mp4")
     temporary.replace(archive)
     return FileResponse(

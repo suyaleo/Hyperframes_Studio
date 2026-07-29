@@ -55,7 +55,7 @@ def test_research_first_controls_are_present() -> None:
     assert 'id="variantGrid"' in html
     assert 'id="renderVariantList"' in html
     assert '/static/styles.css?v=0.4.0' in html
-    assert '/static/app.js?v=0.6.0' in html
+    assert '/static/app.js?v=0.7.0' in html
     assert 'id="btnDownloadVideo"' in html
     assert 'id="btnDownloadHtml"' in html
     assert 'id="btnDownloadPackage"' in html

@@ -105,7 +105,13 @@ def build_cards_from_issue(
     return cards
 
 
-def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) -> str:
+def project_to_html(
+    project: dict[str, Any],
+    aspect_ratio: str | None = None,
+    *,
+    export_mode: str = "composition",
+    export_card_index: int | None = None,
+) -> str:
     """HTML composition for Hyperframes/Playwright render.
 
     Critical: NO viewport fit-scaling. Stage is exact design pixels so
@@ -122,6 +128,17 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
     total = max(per * max(len(cards), 1), 6.0)
     motion = project.get("motion") or "zoom"
     title = project.get("title") or "Hyperframes Studio"
+    if export_mode not in {"composition", "deck", "card"}:
+        raise ValueError(f"unsupported export mode: {export_mode}")
+    exported_card = "null" if export_card_index is None else str(max(0, int(export_card_index)))
+    deck_toolbar = ""
+    if export_mode == "deck":
+        deck_toolbar = f"""
+  <nav class="export-deck-toolbar" aria-label="HTML 카드 탐색">
+    <button id="deckPrev" type="button" aria-label="이전 카드">이전</button>
+    <output id="deckCounter" aria-live="polite">01 / {len(cards):02d} · {aspect}</output>
+    <button id="deckNext" type="button" aria-label="다음 카드">다음</button>
+  </nav>"""
     anim = {
         "cut": "cut",
         "zoom": "zoom",
@@ -140,12 +157,13 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
 
     def card_html(c: dict[str, Any], idx: int) -> str:
         start_t = idx * per
+        display_index = max(1, int(c.get("_export_index") or idx + 1))
         kind = c.get("kind") or "headline"
         structure = str(c.get("structure") or "body").upper()
         primary_text = str(c.get("title") or c.get("quote") or "")
         length_class = " text-xl" if len(primary_text) > 58 else (" text-long" if len(primary_text) > 36 else "")
         active = " is-on" if idx == 0 else ""
-        scene_id = f"scene-{idx + 1:02d}-{_slug(str(c.get('id') or kind))}"
+        scene_id = f"scene-{display_index:02d}-{_slug(str(c.get('id') or kind))}"
         common = (
             f'id="{scene_id}" class="clip card card-{kind} m-{anim}{length_class}{active}" '
             f'data-start="{start_t:.2f}" data-duration="{per:.2f}" data-track-index="1" '
@@ -153,7 +171,7 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
         )
         rail = (
             '<aside class="context-rail">'
-            f'<span class="rail-index">{idx + 1:02d}</span>'
+            f'<span class="rail-index">{display_index:02d}</span>'
             f'<strong>{_esc(structure)}</strong>'
             f'<span data-layout-allow-occlusion>{_esc(kind.upper())}</span>'
             '<i aria-hidden="true" data-layout-allow-occlusion></i>'
@@ -199,7 +217,7 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
 
     slides = "\n".join(card_html(c, i) for i, c in enumerate(cards))
     return f"""<!doctype html>
-<html lang="ko">
+<html lang="ko" data-export-mode="{export_mode}">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width={w}, height={h}, initial-scale=1"/>
@@ -479,6 +497,38 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
     }}
     .theme-remotion .kicker {{ color:#ffb08f; }}
     .theme-remotion .kicker::after {{ content:" · REMOTION"; opacity:.8; }}
+    .export-deck-toolbar {{
+      position: fixed;
+      left: 50%;
+      bottom: 14px;
+      z-index: 100;
+      display: flex;
+      min-height: 38px;
+      align-items: center;
+      gap: 8px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(244,241,234,.22);
+      border-radius: 7px;
+      padding: 5px;
+      color: #f4f1ea;
+      background: rgba(10,10,11,.88);
+      box-shadow: 0 12px 40px rgba(0,0,0,.34);
+      font: 700 12px/1 Pretendard, "Apple SD Gothic Neo", sans-serif;
+      backdrop-filter: blur(8px);
+    }}
+    .export-deck-toolbar button {{
+      min-width: 54px;
+      min-height: 28px;
+      border: 1px solid rgba(244,241,234,.18);
+      border-radius: 5px;
+      color: #f4f1ea;
+      background: rgba(244,241,234,.08);
+      font: inherit;
+      cursor: pointer;
+    }}
+    .export-deck-toolbar button:hover {{ border-color: #f15a24; color: #ff8a57; }}
+    .export-deck-toolbar button:focus-visible {{ outline: 2px solid #ff8a57; outline-offset: 2px; }}
+    .export-deck-toolbar output {{ min-width: 112px; text-align: center; font-variant-numeric: tabular-nums; }}
 
     @keyframes zoomIn {{
       from {{ transform: scale(1.18); filter: blur(2px); }}
@@ -506,23 +556,29 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
     {slides}
     <div class="progress"><i id="bar"></i></div>
   </div>
+  {deck_toolbar}
   <script>
     (function() {{
       const cards = Array.from(document.querySelectorAll('.card'));
       const per = {per:.2f};
       const total = {total:.2f};
+      const exportMode = {json.dumps(export_mode)};
+      const exportedCard = {exported_card};
       const stage = document.getElementById('stage');
       const motion = stage ? stage.dataset.motion || 'zoom' : 'zoom';
       const bar = document.getElementById('bar');
       const params = new URLSearchParams(location.search);
-      const requestedCard = Number(params.get('card'));
-      const fixedPreview = params.get('preview') === '1' && Number.isFinite(requestedCard);
-      const embeddedPreview = fixedPreview || params.get('live') === '1';
+      const requestedParam = Number(params.get('card'));
+      const requestedCard = exportedCard === null ? requestedParam : exportedCard;
+      const fixedPreview = exportMode === 'card' || (params.get('preview') === '1' && Number.isFinite(requestedCard));
+      const embeddedPreview = exportMode !== 'composition' || fixedPreview || params.get('live') === '1';
       let current = -1;
 
       function fitEmbeddedPreview() {{
         if (!embeddedPreview || !stage) return;
-        const scale = Math.min(window.innerWidth / {w}, window.innerHeight / {h});
+        const chromeHeight = exportMode === 'deck' ? 66 : 0;
+        const availableHeight = Math.max(1, window.innerHeight - chromeHeight);
+        const scale = Math.min(window.innerWidth / {w}, availableHeight / {h});
         const scaledWidth = {w} * scale;
         const scaledHeight = {h} * scale;
         document.documentElement.style.width = '100vw';
@@ -532,7 +588,7 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
         stage.style.setProperty('transform', `scale(${{scale}})`, 'important');
         stage.style.transformOrigin = 'top left';
         stage.style.marginLeft = `${{Math.max(0, (window.innerWidth - scaledWidth) / 2)}}px`;
-        stage.style.marginTop = `${{Math.max(0, (window.innerHeight - scaledHeight) / 2)}}px`;
+        stage.style.marginTop = `${{Math.max(0, (availableHeight - scaledHeight) / 2)}}px`;
       }}
 
       fitEmbeddedPreview();
@@ -581,8 +637,28 @@ def project_to_html(project: dict[str, Any], aspect_ratio: str | None = None) ->
         if (bar) bar.style.width = ((t / total) * 100).toFixed(3) + '%';
       }}
 
-      // initial
-      showAt(0);
+      const heroOffset = Math.min(0.5, Math.max(0.01, per * 0.5));
+      if (exportMode === 'deck') {{
+        let deckIndex = 0;
+        const counter = document.getElementById('deckCounter');
+        const selectDeckCard = (nextIndex) => {{
+          deckIndex = cards.length ? (nextIndex + cards.length) % cards.length : 0;
+          showAt(deckIndex * per + heroOffset);
+          if (bar) bar.style.width = cards.length ? `${{((deckIndex + 1) / cards.length * 100).toFixed(3)}}%` : '0%';
+          if (counter) counter.textContent =
+            `${{String(deckIndex + 1).padStart(2, '0')}} / ${{String(cards.length).padStart(2, '0')}} · {aspect}`;
+        }};
+        document.getElementById('deckPrev')?.addEventListener('click', () => selectDeckCard(deckIndex - 1));
+        document.getElementById('deckNext')?.addEventListener('click', () => selectDeckCard(deckIndex + 1));
+        document.addEventListener('keydown', (event) => {{
+          if (event.key === 'ArrowLeft') selectDeckCard(deckIndex - 1);
+          if (event.key === 'ArrowRight') selectDeckCard(deckIndex + 1);
+        }});
+        window.__hyperframesDeck = {{ select: selectDeckCard, get index() {{ return deckIndex; }} }};
+        selectDeckCard(0);
+      }} else {{
+        showAt(0);
+      }}
 
       // Hyperframes seek API
       window.__timelines = window.__timelines || {{}};

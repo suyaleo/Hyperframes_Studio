@@ -58,6 +58,38 @@ def test_all_aspect_variants_have_exact_dimensions_and_art_direction() -> None:
         assert "fitEmbeddedPreview" in html
 
 
+def test_download_exports_include_a_visible_deck_and_single_card_mode() -> None:
+    project = {
+        "title": "다운로드 테스트",
+        "seconds_per_card": 4,
+        "motion": "zoom",
+        "cards": [
+            {"id": "c1", "kind": "headline", "title": "첫 카드", "subtitle": "첫 설명"},
+            {"id": "c2", "kind": "headline", "title": "둘째 카드", "subtitle": "둘째 설명"},
+        ],
+    }
+
+    deck = project_to_html(project, aspect_ratio="16:9", export_mode="deck")
+    single = project_to_html(
+        {**project, "cards": [{**project["cards"][1], "_export_index": 2}]},
+        aspect_ratio="16:9",
+        export_mode="card",
+        export_card_index=0,
+    )
+
+    assert 'data-export-mode="deck"' in deck
+    assert 'id="deckPrev"' in deck
+    assert 'id="deckNext"' in deck
+    assert "selectDeckCard(0)" in deck
+    assert "첫 카드" in deck and "둘째 카드" in deck
+    assert 'data-export-mode="card"' in single
+    assert 'id="deckPrev"' not in single
+    assert "둘째 카드" in single
+    assert "첫 카드" not in single
+    assert 'id="scene-02-c2"' in single
+    assert '<span class="rail-index">02</span>' in single
+
+
 def test_save_project_builds_three_variants_and_aspect_switch_does_not_rewrite_them(
     tmp_path, monkeypatch
 ) -> None:

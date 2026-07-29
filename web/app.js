@@ -461,20 +461,20 @@ function updateExportActions() {
   $("#btnDownloadVideo").disabled = !activeReady;
   $("#btnDownloadPackage").disabled = !hasProject || ready !== Object.keys(ASPECT_META).length;
   $("#btnDownloadVideo").title = activeReady ? `${state.aspect} MP4 다운로드` : `${state.aspect} 렌더가 완료되면 다운로드할 수 있습니다.`;
-  $("#btnDownloadHtml").title = hasProject ? `${state.aspect} 독립 HTML 카드 다운로드` : "카드를 먼저 생성하세요.";
-  $("#btnDownloadPackage").title = ready === 3 ? "세 화면비 HTML·MP4와 프로젝트·근거 JSON 다운로드" : `전체 패키지는 3/3 READY 후 사용할 수 있습니다. (현재 ${ready}/3)`;
+  $("#btnDownloadHtml").title = hasProject ? `${state.aspect} 전체 카드 탐색형 HTML 덱 다운로드` : "카드를 먼저 생성하세요.";
+  $("#btnDownloadPackage").title = ready === 3 ? "세 화면비 카드별 HTML·MP4와 프로젝트·근거 JSON 다운로드" : `전체 패키지는 3/3 READY 후 사용할 수 있습니다. (현재 ${ready}/3)`;
   $("#exportHint").textContent = !hasProject
     ? "카드를 생성하면 HTML을 다운로드할 수 있습니다."
     : ready === 3
-      ? "3/3 READY · 전체 패키지에 HTML, MP4, 프로젝트와 근거 JSON이 포함됩니다."
+      ? "3/3 READY · 전체 패키지에 카드별 HTML, MP4, 프로젝트와 근거 JSON이 포함됩니다."
       : `${state.aspect} HTML은 즉시 저장 · 영상 ${ready}/3 READY`;
 }
 
 function downloadActiveHtml() {
   const variant = activeVariant();
   if (!variant?.preview_url) return;
-  triggerDownload(versionedArtifactUrl(variant.preview_url, state.project?.updated_at), artifactFilename("html"));
-  toast(`${state.aspect} HTML 카드 다운로드를 시작했습니다.`);
+  triggerDownload(withBase(`/api/projects/${state.project.id}/export-html/${variant.key}`), artifactFilename("html"));
+  toast(`${state.aspect} HTML 카드 덱 다운로드를 시작했습니다.`);
 }
 
 function downloadActiveVideo() {
