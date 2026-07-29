@@ -9,6 +9,8 @@ Hyperframes Studio turns a live issue or a user-supplied topic into evidence-bac
 - RSS issue discovery with category filters
 - AI trend discovery combines current news with the MIT-licensed [Awesome AI Agents](https://github.com/slavakurilyak/awesome-ai-agents) catalog; catalog dates and star counts are snapshot metadata, not real-time GitHub measurements
 - Persistent research bundles with evidence URLs, retrieval timestamps, provider status, image-license warnings, and per-card citations
+- Three production volumes: Short (6–8 cards / up to 8 sources), Standard (10–14 / up to 16), and Deep (16–20 / up to 24)
+- Query expansion for narrow headlines, with broader trend evidence kept as context rather than implied direct evidence
 - oMLX 0.5.x structured-output storyboard generation with an explicitly labeled deterministic fallback when authentication or model configuration is unavailable
 - Editable headline, bullet, chart, quote, and CTA cards
 - Hyperframes-compatible HTML composition output
@@ -26,7 +28,7 @@ The creator workspace keeps a documented minimum width of 1024px. At 1180px it c
 
 1. Select a current issue or enter a topic.
 2. Collect research with source provenance, including optional biomedical and Korean-law MCP providers.
-3. Ask a local oMLX model for a structured storyboard.
+3. Choose Short, Standard, or Deep volume and ask a local oMLX model for a schema-constrained storyboard.
 4. Review cards, narration, images, citations, and timing in the Studio workspace.
 5. export Hyperframes HTML or render a Remotion MP4 from the same storyboard data.
 

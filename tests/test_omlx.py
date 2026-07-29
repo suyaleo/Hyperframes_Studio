@@ -17,6 +17,8 @@ class FakeResponse:
 
 
 class FakeClient:
+    last_request: dict | None = None
+
     def __init__(self, payload: dict) -> None:
         self.payload = payload
 
@@ -27,6 +29,7 @@ class FakeClient:
         return None
 
     def post(self, *_args, **_kwargs) -> FakeResponse:
+        FakeClient.last_request = _kwargs
         return FakeResponse(self.payload)
 
 
@@ -37,6 +40,9 @@ def test_generate_storyboard_uses_only_known_citations(monkeypatch) -> None:
         "cards": [
             {"kind": "headline", "structure": "hook", "title": "첫 카드", "citations": ["ev-known"]},
             {"kind": "bullets", "title": "둘째 카드", "bullets": ["근거"], "citations": ["ev-known"]},
+            {"kind": "bullets", "title": "셋째 카드", "bullets": ["근거"], "citations": ["ev-known"]},
+            {"kind": "bullets", "title": "넷째 카드", "bullets": ["근거"], "citations": ["ev-known"]},
+            {"kind": "bullets", "title": "다섯째 카드", "bullets": ["근거"], "citations": ["ev-known"]},
             {"kind": "cta", "structure": "close", "title": "정리", "citations": ["ev-known", "ev-unknown"]},
         ],
     }
@@ -60,12 +66,17 @@ def test_generate_storyboard_uses_only_known_citations(monkeypatch) -> None:
     result = omlx.generate_storyboard(
         {"query": "테스트", "evidence": [{"id": "ev-known", "title": "근거", "excerpt": "내용"}]},
         ["headline", "bullets", "cta"],
+        "short",
     )
 
     assert result["mode"] == "omlx"
     assert result["model"] == "gemma-test"
-    assert result["cards"][2]["citations"] == ["ev-known"]
-    assert [card["id"] for card in result["cards"]] == ["c1", "c2", "c3"]
+    assert result["cards"][-1]["citations"] == ["ev-known"]
+    assert [card["id"] for card in result["cards"]] == [f"c{index}" for index in range(1, 7)]
+    schema = FakeClient.last_request["json"]["response_format"]["json_schema"]["schema"]
+    assert schema["properties"]["cards"]["minItems"] == 6
+    assert schema["properties"]["cards"]["maxItems"] == 8
+    assert FakeClient.last_request["json"]["max_tokens"] == 4200
 
 
 def test_decode_json_accepts_fenced_output() -> None:

@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from api.briefing import BRIEFING_PRESETS, BriefingMode, get_briefing_preset
 from api.compose import build_cards_from_issue, get_project, list_projects, project_to_html, save_project
 from api.omlx import OmlxError, generate_storyboard, get_omlx_status
 from api.research import collect_research, get_research_bundle, list_research_bundles
@@ -69,15 +70,20 @@ class ResearchIn(BaseModel):
     issue_id: str | None = None
     query: str | None = None
     category: str = "rising"
-    max_sources: int = Field(default=8, ge=3, le=12)
+    briefing_mode: BriefingMode = "standard"
+    max_sources: int | None = Field(default=None, ge=3, le=24)
 
 
 class StoryboardIn(BaseModel):
     research_id: str
-    template_ids: list[str] = Field(default_factory=lambda: ["headline", "bullets", "chart", "quote", "cta"])
+    template_ids: list[str] = Field(
+        default_factory=lambda: ["headline", "bullets", "chart", "quote", "cta"],
+        min_length=1,
+    )
+    briefing_mode: BriefingMode = "standard"
     motion: str = "zoom"
     aspect_ratio: str = "9:16"
-    seconds_per_card: float = Field(default=3.0, ge=1.0, le=12.0)
+    seconds_per_card: float | None = Field(default=None, ge=1.0, le=12.0)
     allow_fallback: bool = True
 
 
@@ -87,6 +93,59 @@ def _resolve_issue(issue_id: str | None, category: str) -> dict[str, Any] | None
     if issue_id:
         return next((item for item in items if item.get("id") == issue_id), None)
     return items[0] if items else None
+
+
+def _fallback_storyboard_cards(bundle: dict[str, Any], target_count: int) -> list[dict[str, Any]]:
+    evidence = bundle.get("evidence") or []
+    if not evidence:
+        return []
+    query = str(bundle.get("query") or "Research briefing")
+    first = evidence[0]
+    cards: list[dict[str, Any]] = [
+        {
+            "id": "c1",
+            "kind": "headline",
+            "structure": "hook",
+            "kicker": "RESEARCH DRAFT",
+            "title": query,
+            "subtitle": f"검토 가능한 근거 {len(evidence)}건",
+            "citations": [first["id"]],
+            "narration": "",
+            "visual_query": "",
+        }
+    ]
+    for index in range(max(0, target_count - 2)):
+        item = evidence[index % len(evidence)]
+        excerpt = str(item.get("excerpt") or "").strip()
+        bullets = [part.strip() for part in excerpt.split(".") if part.strip()][:3]
+        if not bullets:
+            bullets = [str(item.get("title") or "근거 원문을 확인하세요.")]
+        cards.append(
+            {
+                "id": f"c{len(cards) + 1}",
+                "kind": "bullets",
+                "structure": "body",
+                "title": str(item.get("title") or "수집된 근거"),
+                "bullets": bullets,
+                "citations": [item["id"]],
+                "narration": "",
+                "visual_query": "",
+            }
+        )
+    cards.append(
+        {
+            "id": f"c{len(cards) + 1}",
+            "kind": "cta",
+            "structure": "close",
+            "title": "근거를 직접 검토하세요",
+            "body": f"수집된 {len(evidence)}개 원문을 확인한 뒤 카드 문구와 나레이션을 확정하세요.",
+            "button": "근거 번들 보기",
+            "citations": [item["id"] for item in evidence[:2]],
+            "narration": "",
+            "visual_query": "",
+        }
+    )
+    return cards
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -134,7 +193,11 @@ def ai_status():
 @app.get("/api/meta")
 def meta():
     cats = json.loads((DATA / "categories.json").read_text(encoding="utf-8"))
-    return {"ok": True, **cats}
+    briefing_modes = [
+        {"id": mode, **preset}
+        for mode, preset in BRIEFING_PRESETS.items()
+    ]
+    return {"ok": True, **cats, "briefing_modes": briefing_modes}
 
 
 @app.get("/api/trends")
@@ -167,6 +230,7 @@ def research_create(body: ResearchIn):
             category=body.category,
             selected_issue=selected_issue,
             max_sources=body.max_sources,
+            briefing_mode=body.briefing_mode,
         )
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
@@ -225,7 +289,7 @@ def storyboard_generate(body: StoryboardIn):
 
     generation_warning = ""
     try:
-        generated = generate_storyboard(bundle, body.template_ids)
+        generated = generate_storyboard(bundle, body.template_ids, body.briefing_mode)
         cards = generated["cards"]
         title = generated["title"]
         summary = generated["summary"]
@@ -234,20 +298,10 @@ def storyboard_generate(body: StoryboardIn):
             raise HTTPException(503, detail=str(error)) from error
         evidence = bundle.get("evidence") or []
         first = evidence[0] if evidence else {}
-        fallback_issue = {
-            "title": bundle.get("query"),
-            "summary": first.get("excerpt") or "수집된 자료를 바탕으로 만든 검토용 초안입니다.",
-            "source": first.get("source") or "Research bundle",
-            "category": bundle.get("category"),
-        }
-        cards = build_cards_from_issue(fallback_issue, template_ids=body.template_ids)
-        citation = first.get("id")
-        for card in cards:
-            card["citations"] = [citation] if citation else []
-            card["narration"] = ""
-            card["visual_query"] = ""
+        preset = get_briefing_preset(body.briefing_mode)
+        cards = _fallback_storyboard_cards(bundle, preset["min_cards"])
         title = str(bundle.get("query") or "Research storyboard")
-        summary = str(fallback_issue["summary"])
+        summary = str(first.get("excerpt") or "수집된 자료를 바탕으로 만든 검토용 초안입니다.")
         generation_warning = str(error)
         generated = {
             "mode": "deterministic-fallback",
@@ -269,7 +323,8 @@ def storyboard_generate(body: StoryboardIn):
         "cards": cards,
         "motion": body.motion,
         "aspect_ratio": body.aspect_ratio,
-        "seconds_per_card": body.seconds_per_card,
+        "seconds_per_card": body.seconds_per_card or get_briefing_preset(body.briefing_mode)["seconds_per_card"],
+        "briefing_mode": body.briefing_mode,
         "status": "draft",
         "generation": {
             "mode": generated["mode"],

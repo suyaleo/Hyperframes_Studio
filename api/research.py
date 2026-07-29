@@ -6,10 +6,12 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from api.briefing import BriefingMode, get_briefing_preset
 from api.settings import RESEARCH_DIR
 from api.trends import get_trends, search_news
 
 SAFE_ID = re.compile(r"^[a-f0-9]{12}$")
+QUERY_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
 
 
 def _clean(value: Any, limit: int) -> str:
@@ -19,6 +21,46 @@ def _clean(value: Any, limit: int) -> str:
 def _evidence_id(item: dict[str, Any]) -> str:
     identity = _clean(item.get("url") or item.get("title"), 1000)
     return f"ev-{hashlib.sha1(identity.encode('utf-8')).hexdigest()[:10]}"
+
+
+def _query_variants(query: str, category: str, breadth: int) -> list[str]:
+    original = _clean(query, 220)
+    without_source = re.sub(r"\s+[-–—|]\s+[^-–—|]{2,40}$", "", original).strip()
+    tokens = QUERY_TOKEN.findall(without_source)
+    compact = " ".join(tokens[: min(6, len(tokens))])
+    variants = [original, without_source]
+    if category == "ai":
+        topic_tokens = [
+            token
+            for token in tokens
+            if token.casefold() not in {"ai", "agent", "agents", "에이전트", "인공지능"}
+        ][:3]
+        variants.extend(
+            [
+                "AI 에이전트 OR 생성형 AI 최신 동향",
+                " ".join([*topic_tokens, "AI 에이전트"]).strip(),
+            ]
+        )
+    variants.append(compact)
+    unique: list[str] = []
+    for variant in variants:
+        if variant and variant.casefold() not in {value.casefold() for value in unique}:
+            unique.append(variant)
+    return unique[:breadth]
+
+
+def _expanded_news_search(query: str, category: str, limit: int, breadth: int) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    per_query = max(8, min(limit, 16))
+    for variant in _query_variants(query, category, breadth):
+        for item in search_news(variant, limit=per_query):
+            identity = _clean(item.get("url") or item.get("title"), 1000)
+            if not identity or identity in seen:
+                continue
+            seen.add(identity)
+            merged.append(item)
+    return merged
 
 
 def evidence_from_item(item: dict[str, Any], retrieved_at: str) -> dict[str, Any] | None:
@@ -55,21 +97,25 @@ def build_research_bundle(
     *,
     category: str = "rising",
     selected_issue: dict[str, Any] | None = None,
-    max_sources: int = 8,
+    max_sources: int | None = None,
+    briefing_mode: BriefingMode = "standard",
     candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     normalized_query = _clean(query or (selected_issue or {}).get("title"), 220)
     if not normalized_query:
         raise ValueError("research query is required")
     retrieved_at = datetime.now(UTC).isoformat()
-    limit = max(3, min(int(max_sources), 12))
+    preset = get_briefing_preset(briefing_mode)
+    requested_sources = max_sources if max_sources is not None else preset["max_sources"]
+    limit = max(3, min(int(requested_sources), 24))
     items: list[dict[str, Any]] = []
+    search_breadth = {"short": 1, "standard": 3, "deep": 4}[briefing_mode]
     if selected_issue:
         items.append(selected_issue)
     if candidates is not None:
         items.extend(candidates)
     elif category == "ai":
-        news_items = search_news(normalized_query, limit=limit + 2)
+        news_items = _expanded_news_search(normalized_query, category, limit + 2, search_breadth)
         catalog_items = [item for item in (get_trends("ai").get("items") or []) if item.get("source_kind") == "catalog"]
         reserved = min(2, len(catalog_items))
         news_slots = max(1, limit - len(items) - reserved)
@@ -77,7 +123,7 @@ def build_research_bundle(
         items.extend(catalog_items[:reserved])
         items.extend(news_items[news_slots:])
     else:
-        items.extend(search_news(normalized_query, limit=limit + 2))
+        items.extend(_expanded_news_search(normalized_query, category, limit + 2, search_breadth))
 
     evidence: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -116,6 +162,8 @@ def build_research_bundle(
         "query": normalized_query,
         "category": category,
         "mode": "issue" if selected_issue else "keyword",
+        "briefing_mode": briefing_mode,
+        "requested_sources": limit,
         "status": "complete" if len(evidence) >= 2 else "partial",
         "created_at": retrieved_at,
         "evidence": evidence,
@@ -138,13 +186,15 @@ def collect_research(
     *,
     category: str = "rising",
     selected_issue: dict[str, Any] | None = None,
-    max_sources: int = 8,
+    max_sources: int | None = None,
+    briefing_mode: BriefingMode = "standard",
 ) -> dict[str, Any]:
     bundle = build_research_bundle(
         query,
         category=category,
         selected_issue=selected_issue,
         max_sources=max_sources,
+        briefing_mode=briefing_mode,
     )
     return save_research_bundle(bundle)
 

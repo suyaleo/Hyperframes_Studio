@@ -16,8 +16,9 @@ Hyperframes Studio is a `local-api` Web application and a `docker-service` distr
 
 ```text
 issue or keyword
-  -> source-aware research bundle
-  -> oMLX JSON Schema storyboard (or labeled deterministic fallback)
+  -> production volume (short / standard / deep)
+  -> expanded, source-aware research bundle
+  -> volume-constrained oMLX JSON Schema storyboard (or labeled deterministic fallback)
   -> shared storyboard IR
   -> Hyperframes HTML + Remotion props
   -> narration/captions + rendered output

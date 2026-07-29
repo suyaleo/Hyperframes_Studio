@@ -101,6 +101,14 @@
           </div>
           <div class="canvas-heading-actions">
             <label class="compact-field">
+              <span>볼륨</span>
+              <select id="briefingMode" aria-label="브리핑 제작 볼륨">
+                <option value="short">숏 · 6–8장</option>
+                <option value="standard" selected>표준 · 10–14장</option>
+                <option value="deep">심층 · 16–20장</option>
+              </select>
+            </label>
+            <label class="compact-field">
               <span>비율</span>
               <select id="aspect">
                 <option value="9:16">9:16 세로</option>
@@ -156,6 +164,7 @@
               <div><dt>FPS</dt><dd>30</dd></div>
               <div><dt>Resolution</dt><dd id="summaryResolution">1080 × 1920</dd></div>
               <div><dt>Slides</dt><dd id="summarySlides">0</dd></div>
+              <div><dt>Briefing</dt><dd id="summaryMode">표준</dd></div>
               <div><dt>Generation</dt><dd id="summaryGeneration" class="muted">대기</dd></div>
               <div><dt>Narration</dt><dd id="summaryNarration" class="muted">미생성</dd></div>
             </dl>
@@ -263,6 +272,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script>window.APP_BASE = "";</script>
-  <script src="/static/app.js?v=0.3.0"></script>
+  <script src="/static/app.js?v=0.4.0"></script>
 </body>
 </html>

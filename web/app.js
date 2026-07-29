@@ -12,6 +12,7 @@ const state = {
   motion: "zoom",
   aspect: "9:16",
   engine: "hyperframes",
+  briefingMode: "standard",
   templates: ["headline", "bullets", "chart", "quote", "cta"],
   meta: null,
   health: null,
@@ -21,6 +22,12 @@ const state = {
   previewPlaying: false,
   renderRunning: false,
   operation: null,
+};
+
+const BRIEFING_DEFAULTS = {
+  short: { label: "숏", cards: "6–8장", sources: 8, secondsPerCard: 3.5 },
+  standard: { label: "표준", cards: "10–14장", sources: 16, secondsPerCard: 4 },
+  deep: { label: "심층", cards: "16–20장", sources: 24, secondsPerCard: 4.5 },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -41,6 +48,24 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function briefingPreset() {
+  const fromMeta = state.meta?.briefing_modes?.find((item) => item.id === state.briefingMode);
+  if (fromMeta) {
+    return {
+      label: fromMeta.label,
+      cards: `${fromMeta.min_cards}–${fromMeta.max_cards}장`,
+      sources: fromMeta.max_sources,
+      secondsPerCard: fromMeta.seconds_per_card,
+    };
+  }
+  return BRIEFING_DEFAULTS[state.briefingMode] || BRIEFING_DEFAULTS.standard;
+}
+
+function formatTime(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 async function api(path, options = {}) {
@@ -266,7 +291,7 @@ function updateTransport() {
   const seconds = Number(state.project?.seconds_per_card || 3);
   const elapsed = current ? (current - 1) * seconds : 0;
   const total = cards.length * seconds;
-  $("#transportTime").textContent = `00:${String(elapsed).padStart(2, "0")} / 00:${String(total).padStart(2, "0")}`;
+  $("#transportTime").textContent = `${formatTime(elapsed)} / ${formatTime(total)}`;
   $("#transportProgress").style.width = cards.length ? `${(current / cards.length) * 100}%` : "0%";
   $(".canvas-transport").dataset.playing = String(state.previewPlaying);
   $("#btnPlay").setAttribute("aria-label", state.previewPlaying ? "카드 미리보기 일시정지" : "카드 미리보기 재생");
@@ -427,6 +452,9 @@ function updateSummary() {
   const duration = cards.length * Number(state.project?.seconds_per_card || 3);
   $("#summaryDuration").textContent = cards.length ? `${duration}s` : "—";
   $("#summarySlides").textContent = String(cards.length);
+  const mode = state.project?.briefing_mode || state.briefingMode;
+  const preset = state.meta?.briefing_modes?.find((item) => item.id === mode) || BRIEFING_DEFAULTS[mode];
+  $("#summaryMode").textContent = preset?.label || mode;
   const narrated = cards.filter((card) => String(card.narration || "").trim()).length;
   $("#summaryNarration").textContent = cards.length ? `${narrated}/${cards.length} 초안` : "미생성";
   const generation = state.project?.generation;
@@ -557,7 +585,8 @@ async function collectResearch({ showToast = true } = {}) {
   try {
     const body = {
       category: state.category,
-      max_sources: 8,
+      briefing_mode: state.briefingMode,
+      max_sources: briefingPreset().sources,
     };
     if (state.manualTopic) body.query = state.manualTopic;
     else body.issue_id = state.selectedIssueId;
@@ -598,7 +627,8 @@ async function buildProject() {
       template_ids: state.templates,
       motion: state.motion,
       aspect_ratio: state.aspect,
-      seconds_per_card: 3,
+      briefing_mode: state.briefingMode,
+      seconds_per_card: briefingPreset().secondsPerCard,
       allow_fallback: true,
     };
     const data = await api("/api/storyboards/generate", { method: "POST", body: JSON.stringify(body) });
@@ -726,6 +756,15 @@ function wireControls() {
     state.aspect = event.target.value;
     updateAspect();
   });
+  $("#briefingMode").addEventListener("change", (event) => {
+    state.briefingMode = event.target.value;
+    state.research = null;
+    renderResearch();
+    updateSummary();
+    updateProjectReadiness();
+    const preset = briefingPreset();
+    toast(`${preset.label} 모드 · ${preset.cards} · 근거 최대 ${preset.sources}건`);
+  });
   $("#engine").addEventListener("change", async (event) => {
     state.engine = event.target.value;
     if (!state.project?.id) return;
@@ -783,9 +822,11 @@ async function loadProject(projectId) {
   state.motion = state.project.motion || state.motion;
   state.aspect = state.project.aspect_ratio || state.aspect;
   state.engine = state.project.engine_hint === "remotion-adapter" ? "remotion" : state.project.engine_hint || state.engine;
+  state.briefingMode = state.project.briefing_mode || state.briefingMode;
   state.selectedCardId = state.project.cards?.[0]?.id || null;
   $("#aspect").value = state.aspect;
   $("#engine").value = state.engine;
+  $("#briefingMode").value = state.briefingMode;
   renderMotionOptions();
   renderSlides();
   renderEditor();

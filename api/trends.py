@@ -44,7 +44,7 @@ def _id(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()[:10]
 
 
-def _parse_feed(url: str, category: str) -> list[dict[str, Any]]:
+def _parse_feed(url: str, category: str, entry_limit: int = 12) -> list[dict[str, Any]]:
     items = []
     try:
         # feedparser can fetch itself; httpx first for control
@@ -57,7 +57,7 @@ def _parse_feed(url: str, category: str) -> list[dict[str, Any]]:
             parsed = feedparser.parse(url)
         except Exception:
             return []
-    for e in (parsed.entries or [])[:12]:
+    for e in (parsed.entries or [])[: max(1, min(int(entry_limit), 50))]:
         title = unescape((e.get("title") or "").strip())
         if not title:
             continue
@@ -143,7 +143,8 @@ def search_news(query: str, limit: int = 10) -> list[dict[str, Any]]:
     if not normalized:
         return []
     url = f"https://news.google.com/rss/search?q={quote_plus(normalized)}&hl=ko&gl=KR&ceid=KR:ko"
-    return _parse_feed(url, "research")[: max(1, min(int(limit), 20))]
+    bounded_limit = max(1, min(int(limit), 24))
+    return _parse_feed(url, "research", entry_limit=bounded_limit)[:bounded_limit]
 
 
 def get_trends(category: str = "rising", force: bool = False) -> dict[str, Any]:

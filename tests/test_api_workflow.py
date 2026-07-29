@@ -39,6 +39,9 @@ def test_storyboard_endpoint_labels_deterministic_fallback(monkeypatch) -> None:
     payload = response.json()
     assert payload["generation"]["mode"] == "deterministic-fallback"
     assert payload["generation"]["warning"] == "키 없음"
+    assert payload["project"]["briefing_mode"] == "standard"
+    assert len(payload["project"]["cards"]) == 10
+    assert payload["project"]["seconds_per_card"] == 4.0
     assert all(card["citations"] == ["ev-known"] for card in payload["project"]["cards"])
 
 

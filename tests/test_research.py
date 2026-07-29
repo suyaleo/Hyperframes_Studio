@@ -58,3 +58,15 @@ def test_ai_research_reserves_catalog_evidence(monkeypatch) -> None:
 
     assert len(bundle["evidence"]) == 6
     assert sum(item["source_kind"] == "catalog" for item in bundle["evidence"]) == 2
+
+
+def test_standard_research_mode_collects_up_to_sixteen_sources() -> None:
+    bundle = research.build_research_bundle(
+        "AI 영상 제작",
+        candidates=[_candidate(index) for index in range(1, 21)],
+        briefing_mode="standard",
+    )
+
+    assert bundle["briefing_mode"] == "standard"
+    assert bundle["requested_sources"] == 16
+    assert len(bundle["evidence"]) == 16
