@@ -19,6 +19,7 @@ Hyperframes Studio turns a live issue or a user-supplied topic into evidence-bac
 - Remotion, Hyperframes, Playwright, and FFmpeg render adapters
 - FastAPI local Web service and Docker Compose packaging
 - `/api/health` and `/api/version` runtime metadata
+- CAT Artifact Bridge v1 endpoints for deterministic owned `image-motion-v1` MP4 output
 - Compact Studio workspace with issue list, media canvas, composition inspector, draggable card sequence, and inspectable render panel
 - Persistent Light, Dark, and System themes with resolved-theme logo switching
 
@@ -47,6 +48,19 @@ uv run uvicorn api.main:app --host 127.0.0.1 --port 8770
 Open `http://127.0.0.1:8770` and check `http://127.0.0.1:8770/api/health`.
 
 For native oMLX generation, set `OMLX_BASE_URL=http://127.0.0.1:8000/v1`, `OMLX_API_KEY`, and `OMLX_MODEL` in an untracked `.env`. Without them, research still works and storyboard generation produces a visibly labeled rule-based review draft.
+
+## Creative Automation Tool bridge
+
+The same FastAPI service exposes `GET /cat/v1/health`, `POST /cat/v1/artifacts`, and same-origin `GET /cat/v1/outputs/{file}`. Run it with an isolated workspace when used as a companion:
+
+```powershell
+$env:HYPERFRAMES_DATA_DIR = 'D:\workspaces\hyperframes-cat'
+uv run uvicorn api.main:app --host 127.0.0.1 --port 8796
+```
+
+`image-motion-v1` accepts one exact-hash local image and explicit `push-in`, `pan-left`, or `pan-right` parameters. It writes durable intent/output/receipt evidence and returns a 1080×1920 H.264/yuv420p MP4 at 30 fps. Duplicate requests reuse the same logical output; conflicting fingerprints, input hash mismatches, and tampered recovery state fail closed.
+
+This endpoint uses the repository's FFmpeg path only. It does not invoke or distribute Remotion, and it never owns the Creative Automation Tool Project, approval, Render, or Delivery state.
 
 ## Docker
 

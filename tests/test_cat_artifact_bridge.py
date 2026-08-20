@@ -87,6 +87,68 @@ def test_http_contract_exposes_health_errors_and_owned_download(tmp_path, monkey
     assert "error" in rejected.json()
 
 
+def test_restart_recovers_output_without_receipt_and_rejects_tamper(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source.png"
+    source.write_bytes(PNG_1X1)
+    workspace = tmp_path / "workspace"
+    bridge = cat_bridge.CatMotionBridge(workspace)
+    renders: list[Path] = []
+
+    def render(_source: Path, destination: Path, _parameters: dict[str, str]) -> None:
+        renders.append(destination)
+        destination.write_bytes(b"verified-mp4")
+
+    monkeypatch.setattr(cat_bridge, "_render_motion", render)
+    monkeypatch.setattr(cat_bridge, "_verify_video", lambda _path, _parameters: None)
+    request = request_for(source, key="operation-restart-recovery")
+    first = bridge.execute(request)
+    slug = first["output"]["downloadUrl"].rsplit("/", 1)[-1].removesuffix(".mp4")
+    (bridge.operations_root / f"{slug}.receipt.json").unlink()
+
+    restarted = cat_bridge.CatMotionBridge(workspace)
+    recovered = restarted.execute(request)
+    assert recovered["output"]["contentHash"] == first["output"]["contentHash"]
+    assert len(renders) == 1
+
+    restarted.output_path(f"{slug}.mp4").write_bytes(b"tampered")
+    with pytest.raises(cat_bridge.BridgeConflict, match="hash-mismatched"):
+        cat_bridge.CatMotionBridge(workspace).execute(request)
+
+
+def test_interrupted_pending_output_is_retried_under_one_intent(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source.png"
+    source.write_bytes(PNG_1X1)
+    workspace = tmp_path / "workspace"
+    bridge = cat_bridge.CatMotionBridge(workspace)
+    attempts = 0
+
+    def interrupted_then_complete(
+        _source: Path,
+        destination: Path,
+        _parameters: dict[str, str],
+    ) -> None:
+        nonlocal attempts
+        attempts += 1
+        destination.write_bytes(b"partial" if attempts == 1 else b"complete-mp4")
+        if attempts == 1:
+            raise RuntimeError("simulated bridge interruption")
+
+    monkeypatch.setattr(cat_bridge, "_render_motion", interrupted_then_complete)
+    monkeypatch.setattr(cat_bridge, "_verify_video", lambda _path, _parameters: None)
+    request = request_for(source, key="operation-interrupted-pending")
+    with pytest.raises(RuntimeError, match="simulated bridge interruption"):
+        bridge.execute(request)
+
+    recovered = cat_bridge.CatMotionBridge(workspace).execute(request)
+    output = cat_bridge.CatMotionBridge(workspace).output_path(
+        recovered["output"]["downloadUrl"].rsplit("/", 1)[-1]
+    )
+    assert output.read_bytes() == b"complete-mp4"
+    assert attempts == 2
+    assert len(list(bridge.operations_root.glob("*.intent.json"))) == 1
+    assert len(list(bridge.operations_root.glob("*.receipt.json"))) == 1
+
+
 @pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="FFmpeg is required")
 def test_real_bridge_output_is_verified_h264_motion(tmp_path) -> None:
     source = tmp_path / "source.png"
