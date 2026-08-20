@@ -12,11 +12,12 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from api.briefing import BRIEFING_PRESETS, BriefingMode, get_briefing_preset
+from api.cat_bridge import BridgeConflict, CatMotionBridge
 from api.compose import (
     ASPECT_VARIANTS,
     build_cards_from_issue,
@@ -45,6 +46,7 @@ DATA = STATIC_DATA_DIR
 ASPECT_ORDER = tuple(ASPECT_VARIANTS)
 _RENDER_JOBS: dict[str, dict[str, Any]] = {}
 _RENDER_JOBS_LOCK = threading.Lock()
+CAT_BRIDGE = CatMotionBridge()
 
 
 def _has_playwright() -> bool:
@@ -203,6 +205,32 @@ def health():
 @app.get("/api/version")
 def version():
     return {"service": SERVICE_SLUG, "version": VERSION}
+
+
+@app.get("/cat/v1/health")
+def cat_bridge_health():
+    return CAT_BRIDGE.health()
+
+
+@app.post("/cat/v1/artifacts")
+def cat_bridge_execute(body: dict[str, Any]):
+    try:
+        return CAT_BRIDGE.execute(body)
+    except BridgeConflict as error:
+        return JSONResponse({"error": str(error)}, status_code=409)
+    except ValueError as error:
+        return JSONResponse({"error": str(error)}, status_code=400)
+    except RuntimeError as error:
+        return JSONResponse({"error": str(error)}, status_code=500)
+
+
+@app.get("/cat/v1/outputs/{filename}")
+def cat_bridge_output(filename: str):
+    try:
+        path = CAT_BRIDGE.output_path(filename)
+    except FileNotFoundError as error:
+        raise HTTPException(404, detail="MotionMedia output not found") from error
+    return FileResponse(path, media_type="video/mp4", filename=filename)
 
 
 @app.get("/api/ai/status")
