@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, hyperframes-studio]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -34,7 +34,7 @@ jobs:
         run: npm run typecheck --prefix remotion-template
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, hyperframes-studio]
     needs: test
     steps:
       - uses: actions/checkout@v4

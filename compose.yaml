@@ -7,7 +7,7 @@ services:
       args:
         VERSION: 0.1.0
         VCS_REF: ${VCS_REF:-local}
-    image: hyperframes-studio:local
+    image: ghcr.io/suyaleo/hyperframes-studio:local
     restart: unless-stopped
     shm_size: "1gb"
     env_file:
@@ -25,15 +25,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${HYPERFRAMES_STUDIO_PORT:-8770}:8770"
+      - "127.0.0.1:${HYPERFRAMES_STUDIO_PORT:-8770}:8770"
     volumes:
-      - hyperframes-studio-data:/data
+      - ${HYPERFRAMES_DATA_DIR_HOST:-./data}:/data
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8770/api/health"]
       interval: 30s
       timeout: 5s
       start_period: 20s
       retries: 5
-
-volumes:
-  hyperframes-studio-data:
